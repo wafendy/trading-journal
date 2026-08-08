@@ -107,6 +107,9 @@ Key-value. Holds `last_upeti` (string-encoded real) used to prefill the create f
     US market holidays are NOT considered.
 - **Year attribution:** a trade belongs to the year of its **`exit_date`**
   (P&L realizes at exit). Pending/filled trades have no year.
+- **Equity-curve ordering:** points ordered by `exit_date` ascending, tie-broken by
+  `id` ascending. Each point's `cumulativePnl` is the running sum of `realized_pnl`
+  in that order.
 
 ### Entry-signal pill colors (consistent everywhere)
 
@@ -126,9 +129,9 @@ and included in responses.
 | method + path | purpose |
 |---|---|
 | `GET /api/trades?status=pending\|filled` | Open rows for the top area (no pagination — small set). |
-| `GET /api/trades/history?year=<y>&cursor=<id>&limit=50` | Exited rows for a year, newest first, keyset pagination (cursor = last seen id). Returns `{ items, nextCursor }`. |
+| `GET /api/trades/history?year=<y>&cursor=<id>&limit=50` | Exited rows for a year, ordered `exit_date` DESC then `id` DESC (newest first, stable tie-break), keyset pagination (cursor = last seen id). Returns `{ items, nextCursor }`. |
 | `GET /api/years` | Distinct years present in exited trades (drives year selector). |
-| `GET /api/summary?year=<y>` | `{ totalPnl, totalR, tradeCount, winRate, equityCurve: [{ exitDate, cumulativePnl }] }` ordered by exit date. |
+| `GET /api/summary?year=<y>` | `{ totalPnl, totalR, tradeCount, winRate, equityCurve: [{ exitDate, cumulativePnl }] }` ordered by exit date. `winRate` = (exited trades with `realized_pnl > 0`) / `tradeCount` for the year; `0` when `tradeCount` is 0. |
 | `POST /api/trades` | Create plan (status `pending`). Zod-validated. Also updates `last_upeti`. |
 | `PATCH /api/trades/:id` | Edit fields (entry date, prices, SL/TP, verify_days, etc.). |
 | `POST /api/trades/:id/fill` | Mark filled; `{ fillDate }` (default today). Only valid from `pending`. |
