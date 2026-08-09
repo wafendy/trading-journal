@@ -1,0 +1,181 @@
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../api';
+import { SignalPill } from './SignalPill';
+import { ExitForm } from './ExitForm';
+import { EditPositionForm } from './EditPositionForm';
+import { TradeDetails, NoteIcon } from './TradeDetails';
+import { useToast } from './Toast';
+import type { TradeDTO } from '../../lib/types';
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
+const th = 'px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400';
+
+const MS_PER_DAY = 86_400_000;
+// Whole days from today until an ISO date (negative if already past), or null.
+function daysUntil(iso: string | null): number | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const target = new Date(iso + 'T00:00:00Z').getTime();
+  const today = new Date(todayISO() + 'T00:00:00Z').getTime();
+  return Math.round((target - today) / MS_PER_DAY);
+}
+// Earnings within the next 7 days (0–7 inclusive, not past) → warn.
+function earningsSoon(iso: string | null): number | null {
+  const d = daysUntil(iso);
+  return d !== null && d >= 0 && d <= 7 ? d : null;
+}
+const earningsMissing = (iso: string | null) => iso == null || iso === '';
+
+function Row({ t, children, flagged, warnEarnings, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; onOpen?: (t: TradeDTO) => void }) {
+  const soon = warnEarnings ? earningsSoon(t.earningsDate) : null;
+  return (
+    <tr
+      onClick={onOpen ? () => onOpen(t) : undefined}
+      className={`${flagged ? 'bg-red-100 dark:bg-red-900/40' : ''} ${onOpen ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60' : ''}`}
+    >
+      <td className="px-3 py-2 font-medium">
+        {t.ticker}
+        {t.notes && <NoteIcon />}
+      </td>
+      <td className="px-3 py-2">{t.shares}</td>
+      <td className="px-3 py-2">
+        <div>{money(t.entryPrice)}</div>
+        <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">{t.entryDate}</div>
+      </td>
+      <td className="px-3 py-2">{money(t.slPrice)}</td>
+      <td className="px-3 py-2">{money(t.tpPrice)}</td>
+      <td className="px-3 py-2">
+        {t.earningsDate ?? '—'}
+        {warnEarnings && earningsMissing(t.earningsDate) && (
+          <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/30 dark:text-amber-200" title="No earnings date set">
+            ⚠ no date
+          </span>
+        )}
+        {soon !== null && (
+          <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/30 dark:text-amber-200" title="Earnings within 7 days">
+            ⚠ {soon === 0 ? 'today' : `${soon}d`}
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-2"><SignalPill signal={t.entrySignal} /></td>
+      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>{children}</td>
+    </tr>
+  );
+}
+
+function HeaderRow() {
+  return (
+    <thead><tr>
+      <th className={th}>Ticker</th><th className={th}>Shares</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Earnings</th><th className={th}>Signal</th><th className={th}>Actions</th>
+    </tr></thead>
+  );
+}
+
+export function PendingOrders() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const pending = useQuery({ queryKey: ['trades', 'pending'], queryFn: () => api.open('pending') });
+  const [viewing, setViewing] = useState<TradeDTO | null>(null);
+  const inval = () => qc.invalidateQueries();
+
+  const fill = useMutation({
+    mutationFn: (id: number) => api.fill(id, todayISO()),
+    onSuccess: () => { inval(); toast('Order marked as filled'); },
+    onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
+  });
+  const cancel = useMutation({
+    mutationFn: (id: number) => api.cancel(id),
+    onSuccess: () => { inval(); toast('Pending order cancelled'); },
+    onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
+  });
+
+  return (
+    <section>
+      <p className="mb-2 text-xs text-slate-400">Click a row for notes &amp; details.</p>
+      <table className="w-full text-sm">
+        <HeaderRow />
+        <tbody>
+          {pending.data?.map((t) => (
+            <Row key={t.id} t={t} onOpen={setViewing}>
+              <span className="flex gap-2">
+                <button onClick={() => fill.mutate(t.id)} className="cursor-pointer rounded bg-emerald-600 px-2 py-0.5 text-xs text-white">Mark filled</button>
+                <button onClick={() => cancel.mutate(t.id)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Cancel</button>
+              </span>
+            </Row>
+          ))}
+          {pending.data?.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-500">No trading plans yet</td></tr>}
+        </tbody>
+      </table>
+      {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
+    </section>
+  );
+}
+
+export function ActivePositions() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const filled = useQuery({ queryKey: ['trades', 'filled'], queryFn: () => api.open('filled') });
+  const [exiting, setExiting] = useState<TradeDTO | null>(null);
+  const [editing, setEditing] = useState<TradeDTO | null>(null);
+  const [viewing, setViewing] = useState<TradeDTO | null>(null);
+  const inval = () => qc.invalidateQueries();
+
+  const keep = useMutation({
+    mutationFn: (id: number) => api.dudDecision(id, { decision: 'keep' }),
+    onSuccess: () => { inval(); toast('Kept — will stop reminding'); },
+    onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
+  });
+
+  const earningsWarnings = (filled.data ?? [])
+    .map((t) => ({ t, days: earningsSoon(t.earningsDate) }))
+    .filter((x) => x.days !== null)
+    .sort((a, b) => (a.days as number) - (b.days as number));
+  const missingEarnings = (filled.data ?? []).filter((t) => earningsMissing(t.earningsDate));
+
+  return (
+    <section className="space-y-3">
+      <p className="text-xs text-slate-400">Click a row for notes &amp; details.</p>
+      {earningsWarnings.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <span className="font-semibold">⚠ Earnings soon:</span>{' '}
+          {earningsWarnings
+            .map(({ t, days }) => `${t.ticker} (${days === 0 ? 'today' : `${days}d`})`)
+            .join(', ')}{' '}
+          — consider exiting before the report.
+        </div>
+      )}
+      {missingEarnings.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <span className="font-semibold">⚠ Missing earnings date:</span>{' '}
+          {missingEarnings.map((t) => t.ticker).join(', ')}{' '}
+          — set an earnings date so you can be warned before the report.
+        </div>
+      )}
+      <table className="w-full text-sm">
+        <HeaderRow />
+        <tbody>
+          {filled.data?.map((t) => (
+            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings onOpen={setViewing}>
+              <span className="flex items-center gap-2">
+                {t.dudFlagged && (
+                  <>
+                    <span className="rounded bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">Confirm</span>
+                    <button onClick={() => keep.mutate(t.id)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Keep</button>
+                  </>
+                )}
+                <button onClick={() => setEditing(t)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Edit</button>
+                <button onClick={() => setExiting(t)} className={`cursor-pointer rounded px-2 py-0.5 text-xs text-white ${t.dudFlagged ? 'bg-red-600' : 'bg-slate-500 dark:bg-slate-500'}`}>Exit</button>
+              </span>
+            </Row>
+          ))}
+          {filled.data?.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
+        </tbody>
+      </table>
+
+      {exiting && <ExitForm trade={exiting} onClose={() => setExiting(null)} />}
+      {editing && <EditPositionForm trade={editing} onClose={() => setEditing(null)} />}
+      {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
+    </section>
+  );
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `trades` ADD `earnings_date` text;

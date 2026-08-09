@@ -19,7 +19,7 @@
 - **Enums (verbatim):** `entryType` ∈ `buy_limit | buy_stop`. `entrySignal` ∈ `btb | buy_lautan | buy_magenta | hawk1 | buy_spec`. `status` ∈ `pending | filled | exited`. `verifyDays` ∈ `5 | 7 | 10 | 14`. `dudDecision` ∈ `null | keep | exit`.
 - **Signal pill colors:** btb=green, buy_lautan=light blue, buy_magenta=magenta, hawk1=dark green, buy_spec=pink.
 - **Formulas:** `shares = floor(upeti / (entryPrice − slPrice))`; `realizedPnl = (exitPrice − entryPrice) × shares`; `rMultiple = realizedPnl / upeti`; dud flagged when `status==='filled' && dudDecision===null && weekdaysBetween(fillDate, today) >= verifyDays`.
-- **Ordering:** history `exit_date DESC, id DESC`; equity curve `exit_date ASC, id ASC` (running sum). Keyset pagination, cursor = last seen `id`, page size 50.
+- **Ordering:** history `exit_date DESC, id DESC`; equity curve `exit_date ASC, id ASC` (running sum). Keyset pagination with a **composite cursor** `"<exitDate>|<id>"` (string) = last seen row's exit_date and id, page size 50. Query: `exit_date < cExit OR (exit_date = cExit AND id < cId)`. (A plain id-only cursor is WRONG here: id order and exit_date order diverge when trades exit out of creation order, causing dropped/duplicated rows.)
 - **Year attribution:** by `exit_date` year. `winRate` = trades with `realizedPnl > 0` ÷ tradeCount; 0 when tradeCount 0.
 - **Commit after every task.** Use conventional commit messages.
 
@@ -238,6 +238,7 @@ export interface TradeRow {
   entryType: EntryType;
   entrySignal: EntrySignal;
   entryDate: string;
+  earningsDate: string | null;
   verifyDays: number;
   status: TradeStatus;
   fillDate: string | null;
@@ -314,7 +315,7 @@ describe('isDudFlagged', () => {
 describe('deriveTrade', () => {
   const row: TradeRow = {
     id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: 60,
-    entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', verifyDays: 5,
+    entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', earningsDate: '2026-08-25', verifyDays: 5,
     status: 'exited', fillDate: '2026-08-03', dudDecision: null, exitPrice: 55, exitDate: '2026-08-20',
     createdAt: '2026-08-03T00:00:00Z', updatedAt: '2026-08-20T00:00:00Z',
   };
@@ -430,6 +431,7 @@ export const trades = sqliteTable('trades', {
   entryType: text('entry_type').notNull(),
   entrySignal: text('entry_signal').notNull(),
   entryDate: text('entry_date').notNull(),
+  earningsDate: text('earnings_date'),
   verifyDays: integer('verify_days').notNull(),
   status: text('status').notNull().default('pending'),
   fillDate: text('fill_date'),
@@ -494,7 +496,7 @@ git add src/server/db drizzle && git commit -m "feat: drizzle schema and db conn
 
 **Interfaces:**
 - Produces:
-  - `createTradeSchema` → `{ ticker, upeti, entryPrice, slPrice, tpPrice?, entryType, entrySignal, entryDate, verifyDays }` with refinement `slPrice < entryPrice`.
+  - `createTradeSchema` → `{ ticker, upeti, entryPrice, slPrice, tpPrice?, entryType, entrySignal, entryDate, earningsDate, verifyDays }` (earningsDate required ISO) with refinement `slPrice < entryPrice`.
   - `patchTradeSchema` (all above optional).
   - `fillSchema` `{ fillDate: string }`; `cancelSchema` (empty); `exitSchema` `{ exitPrice: number; exitDate: string }`; `dudDecisionSchema` = discriminated: `{ decision: 'keep' }` OR `{ decision: 'exit', exitPrice: number, exitDate: string }`.
   - `CreateTradeInput` etc. via `z.infer`.
@@ -506,7 +508,7 @@ import { describe, it, expect } from 'vitest';
 import { createTradeSchema, dudDecisionSchema, exitSchema } from './validation';
 
 describe('createTradeSchema', () => {
-  const valid = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', verifyDays: 5 };
+  const valid = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', earningsDate: '2026-08-25', verifyDays: 5 };
   it('accepts valid input and uppercases ticker', () => {
     const r = createTradeSchema.parse(valid);
     expect(r.ticker).toBe('AAPL');
@@ -563,6 +565,7 @@ export const createTradeSchema = z.object({
   entryType,
   entrySignal,
   entryDate: isoDate,
+  earningsDate: isoDate, // required on create (manual entry, no auto-fetch)
   verifyDays,
 }).refine((d) => d.slPrice < d.entryPrice, { message: 'slPrice must be below entryPrice', path: ['slPrice'] });
 
@@ -575,6 +578,7 @@ export const patchTradeSchema = z.object({
   entryType: entryType.optional(),
   entrySignal: entrySignal.optional(),
   entryDate: isoDate.optional(),
+  earningsDate: isoDate.optional(),
   verifyDays: verifyDays.optional(),
 });
 
@@ -614,7 +618,7 @@ git add src/server/validation.ts src/server/validation.test.ts && git commit -m 
 - Produces a `TradeRepo` (factory `createRepo(db: DB, now: () => string)`):
   - `create(input: CreateTradeInput): TradeRow` (status pending; sets timestamps; also `setLastUpeti`)
   - `list(status: 'pending' | 'filled'): TradeRow[]`
-  - `history(year: number, cursor: number | null, limit: number): { items: TradeRow[]; nextCursor: number | null }` (order exit_date DESC, id DESC)
+  - `history(year: number, cursor: string | null, limit: number): { items: TradeRow[]; nextCursor: string | null }` (order exit_date DESC, id DESC; composite cursor `"<exitDate>|<id>"`)
   - `years(): number[]` (distinct exit years, desc)
   - `getById(id: number): TradeRow | undefined`
   - `patch(id: number, input: PatchTradeInput): TradeRow` (throws `NotFound`)
@@ -640,7 +644,7 @@ function setup() {
   return { repo, setClock: (c: string) => (clock = c) };
 }
 
-const base = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit' as const, entrySignal: 'btb' as const, entryDate: '2026-08-03', verifyDays: 5 as const };
+const base = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit' as const, entrySignal: 'btb' as const, entryDate: '2026-08-03', earningsDate: '2026-08-25', verifyDays: 5 as const };
 
 describe('create + lifecycle', () => {
   let ctx: ReturnType<typeof setup>;
@@ -685,12 +689,16 @@ describe('create + lifecycle', () => {
 });
 
 describe('history + years', () => {
-  it('filters by exit year, newest first, paginates', () => {
+  const mkExited = (repo: ReturnType<typeof createRepo>, exitDate: string) => {
+    const t = repo.create({ ...base, ticker: 'AAPL' });
+    repo.fill(t.id, '2025-01-02');
+    repo.exit(t.id, 55, exitDate);
+    return t.id;
+  };
+
+  it('filters by exit year, newest first, paginates (monotonic ids)', () => {
     const { repo } = setup();
-    // create 3 exited in 2025 with increasing ids
-    const mk = (exitDate: string) => { const t = repo.create({ ...base, ticker: 'AAPL' }); repo.fill(t.id, '2025-01-02'); repo.exit(t.id, 55, exitDate); return t.id; };
-    mk('2025-03-01'); mk('2025-04-01'); mk('2025-05-01');
-    // one in 2024
+    mkExited(repo, '2025-03-01'); mkExited(repo, '2025-04-01'); mkExited(repo, '2025-05-01');
     const t2024 = repo.create({ ...base }); repo.fill(t2024.id, '2024-01-02'); repo.exit(t2024.id, 55, '2024-06-01');
 
     expect(repo.years()).toEqual([2025, 2024]);
@@ -700,6 +708,41 @@ describe('history + years', () => {
     const page2 = repo.history(2025, page1.nextCursor, 2);
     expect(page2.items.map((i) => i.exitDate)).toEqual(['2025-03-01']);
     expect(page2.nextCursor).toBeNull();
+  });
+
+  // Critical: ids and exit_dates in OPPOSITE order. An id-only cursor would
+  // drop/duplicate rows here. Paging must walk every row exactly once.
+  it('paginates correctly when id order and exit_date order diverge', () => {
+    const { repo } = setup();
+    // id1 exits latest, id5 exits earliest — fully non-monotonic
+    const id1 = mkExited(repo, '2025-05-01'); // id 1, newest exit
+    const id2 = mkExited(repo, '2025-04-01'); // id 2
+    const id3 = mkExited(repo, '2025-03-01'); // id 3
+    const id4 = mkExited(repo, '2025-02-01'); // id 4
+    const id5 = mkExited(repo, '2025-01-01'); // id 5, oldest exit
+    void id1; void id2; void id3; void id4; void id5;
+
+    // Walk all pages, collect ids, assert no dupes and no drops.
+    const seen: number[] = [];
+    let cursor: string | null = null;
+    let guard = 0;
+    do {
+      const page = repo.history(2025, cursor, 2);
+      seen.push(...page.items.map((i) => i.id));
+      cursor = page.nextCursor;
+      if (++guard > 10) throw new Error('pagination did not terminate');
+    } while (cursor !== null);
+
+    // newest-exit first => id1..id5 in that order, every row exactly once
+    expect(seen).toEqual([id1, id2, id3, id4, id5]);
+    expect(new Set(seen).size).toBe(5); // no duplicates
+  });
+
+  it('returns empty page and null cursor for a year with no trades', () => {
+    const { repo } = setup();
+    const page = repo.history(2099, null, 50);
+    expect(page.items).toEqual([]);
+    expect(page.nextCursor).toBeNull();
   });
 });
 ```
@@ -712,7 +755,7 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement `src/server/repository.ts`**
 
 ```ts
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { DB } from './db/index';
 import { trades, appSettings } from './db/schema';
 import type { TradeRow } from '../lib/types';
@@ -724,7 +767,7 @@ export class ConflictError extends Error {}
 export interface TradeRepo {
   create(input: CreateTradeInput): TradeRow;
   list(status: 'pending' | 'filled'): TradeRow[];
-  history(year: number, cursor: number | null, limit: number): { items: TradeRow[]; nextCursor: number | null };
+  history(year: number, cursor: string | null, limit: number): { items: TradeRow[]; nextCursor: string | null };
   years(): number[];
   getById(id: number): TradeRow | undefined;
   patch(id: number, input: PatchTradeInput): TradeRow;
@@ -749,7 +792,7 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       const row = db.insert(trades).values({
         ticker: input.ticker, upeti: input.upeti, entryPrice: input.entryPrice, slPrice: input.slPrice,
         tpPrice: input.tpPrice ?? null, entryType: input.entryType, entrySignal: input.entrySignal,
-        entryDate: input.entryDate, verifyDays: input.verifyDays, status: 'pending',
+        entryDate: input.entryDate, earningsDate: input.earningsDate, verifyDays: input.verifyDays, status: 'pending',
         fillDate: null, dudDecision: null, exitPrice: null, exitDate: null, createdAt: ts, updatedAt: ts,
       }).returning().get() as TradeRow;
       this.setLastUpeti(input.upeti);
@@ -761,11 +804,20 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
     history(year, cursor, limit) {
       const y = String(year);
       const conds = [eq(trades.status, 'exited'), sql`substr(${trades.exitDate},1,4) = ${y}`];
-      if (cursor !== null) conds.push(lt(trades.id, cursor));
+      // Composite keyset cursor "<exitDate>|<id>": rows strictly "after" the
+      // boundary in (exit_date DESC, id DESC) order. Splitting on the FIRST '|'
+      // keeps the id intact even though exitDate never contains '|'.
+      if (cursor !== null) {
+        const sep = cursor.indexOf('|');
+        const cExit = cursor.slice(0, sep);
+        const cId = Number(cursor.slice(sep + 1));
+        conds.push(sql`(${trades.exitDate} < ${cExit} or (${trades.exitDate} = ${cExit} and ${trades.id} < ${cId}))`);
+      }
       const rows = db.select().from(trades).where(and(...conds))
         .orderBy(desc(trades.exitDate), desc(trades.id)).limit(limit + 1).all() as TradeRow[];
       const items = rows.slice(0, limit);
-      const nextCursor = rows.length > limit ? items[items.length - 1]!.id : null;
+      const last = items[items.length - 1];
+      const nextCursor = rows.length > limit && last ? `${last.exitDate}|${last.id}` : null;
       return { items, nextCursor };
     },
     years() {
@@ -859,7 +911,7 @@ function setup() {
   return { app, repo, setClock: (c: string) => (clock = c) };
 }
 
-const body = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', verifyDays: 5 };
+const body = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', earningsDate: '2026-08-25', verifyDays: 5 };
 
 describe('POST /api/trades', () => {
   it('creates and returns a derived DTO', async () => {
@@ -949,7 +1001,7 @@ export function registerRoutes(api: Hono, { repo, now }: Deps): void {
     const year = Number(c.req.query('year'));
     const limit = Number(c.req.query('limit') ?? '50');
     const cursorRaw = c.req.query('cursor');
-    const cursor = cursorRaw ? Number(cursorRaw) : null;
+    const cursor = cursorRaw ? cursorRaw : null;
     if (!Number.isInteger(year)) return c.json({ error: 'year required' }, 400);
     const { items, nextCursor } = repo.history(year, cursor, limit);
     return c.json({ items: items.map(dto), nextCursor });
@@ -962,7 +1014,7 @@ export function registerRoutes(api: Hono, { repo, now }: Deps): void {
     if (!Number.isInteger(year)) return c.json({ error: 'year required' }, 400);
     // gather all exited for year
     const all: TradeRow[] = [];
-    let cursor: number | null = null;
+    let cursor: string | null = null;
     do {
       const page = repo.history(year, cursor, 500);
       all.push(...page.items);
@@ -1123,7 +1175,7 @@ export interface Summary {
   totalPnl: number; totalR: number; tradeCount: number; winRate: number;
   equityCurve: { exitDate: string; cumulativePnl: number }[];
 }
-export interface HistoryPage { items: TradeDTO[]; nextCursor: number | null; }
+export interface HistoryPage { items: TradeDTO[]; nextCursor: string | null; }
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
@@ -1136,8 +1188,8 @@ export const api = {
   years: () => fetch('/api/years').then(json<number[]>),
   summary: (year: number) => fetch(`/api/summary?year=${year}`).then(json<Summary>),
   open: (status: 'pending' | 'filled') => fetch(`/api/trades?status=${status}`).then(json<TradeDTO[]>),
-  history: (year: number, cursor: number | null, limit = 50) =>
-    fetch(`/api/trades/history?year=${year}&limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`).then(json<HistoryPage>),
+  history: (year: number, cursor: string | null, limit = 50) =>
+    fetch(`/api/trades/history?year=${year}&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`).then(json<HistoryPage>),
   settings: () => fetch('/api/settings').then(json<{ lastUpeti: number | null }>),
   create: (b: unknown) => post('/api/trades', b).then(json<TradeDTO>),
   patch: (id: number, b: unknown) => fetch(`/api/trades/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<TradeDTO>),
@@ -1419,6 +1471,7 @@ export function TradeForm({ open, onClose }: { open: boolean; onClose: () => voi
   const [entryType, setEntryType] = useState<EntryType>('buy_limit');
   const [entrySignal, setEntrySignal] = useState<EntrySignal>('btb');
   const [entryDate, setEntryDate] = useState(todayISO());
+  const [earningsDate, setEarningsDate] = useState('');
   const [verifyDays, setVerifyDays] = useState(5);
 
   useEffect(() => { if (settings.data?.lastUpeti != null) setUpeti(String(settings.data.lastUpeti)); }, [settings.data]);
@@ -1431,13 +1484,13 @@ export function TradeForm({ open, onClose }: { open: boolean; onClose: () => voi
   const m = useMutation({
     mutationFn: () => api.create({
       ticker, upeti: Number(upeti), entryPrice: Number(entryPrice), slPrice: Number(slPrice),
-      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, entryDate, verifyDays,
+      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, entryDate, earningsDate, verifyDays,
     }),
     onSuccess: () => { qc.invalidateQueries(); onClose(); },
   });
 
   if (!open) return null;
-  const valid = ticker && Number(upeti) > 0 && Number(entryPrice) > Number(slPrice) && Number(slPrice) > 0;
+  const valid = ticker && Number(upeti) > 0 && Number(entryPrice) > Number(slPrice) && Number(slPrice) > 0 && earningsDate;
   return (
     <Modal title="New Trade Plan" onClose={onClose}>
       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -1449,6 +1502,7 @@ export function TradeForm({ open, onClose }: { open: boolean; onClose: () => voi
         <label>Entry type<select value={entryType} onChange={(e) => setEntryType(e.target.value as EntryType)} className="mt-1 w-full rounded bg-slate-700 px-2 py-1"><option value="buy_limit">Buy Limit</option><option value="buy_stop">Buy Stop</option></select></label>
         <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-slate-700 px-2 py-1">{SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
         <label>Entry date<input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="mt-1 w-full rounded bg-slate-700 px-2 py-1" /></label>
+        <label>Earnings date<input type="date" value={earningsDate} onChange={(e) => setEarningsDate(e.target.value)} className="mt-1 w-full rounded bg-slate-700 px-2 py-1" /></label>
         <label>Verify in<select value={verifyDays} onChange={(e) => setVerifyDays(Number(e.target.value))} className="mt-1 w-full rounded bg-slate-700 px-2 py-1">{[5,7,10,14].map((d) => <option key={d} value={d}>{d} days</option>)}</select></label>
       </div>
       <div className="mt-3 text-sm text-slate-300">Position size: <span className="font-semibold text-slate-100">{shares} shares</span></div>
@@ -1479,6 +1533,7 @@ function Row({ t, children, flagged }: { t: TradeDTO; children: React.ReactNode;
     <tr className={flagged ? 'bg-red-900/40' : ''}>
       <td className="px-3 py-2 font-medium">{t.ticker}</td>
       <td className="px-3 py-2">{t.entryDate}</td>
+      <td className="px-3 py-2">{t.earningsDate ?? '—'}</td>
       <td className="px-3 py-2">{money(t.entryPrice)}</td>
       <td className="px-3 py-2">{money(t.slPrice)}</td>
       <td className="px-3 py-2">{money(t.tpPrice)}</td>
@@ -1506,7 +1561,7 @@ export function PlanTables() {
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-300">Pending Orders</h2>
         <table className="w-full text-sm">
-          <thead><tr><th className={th}>Ticker</th><th className={th}>Entry date</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Shares</th><th className={th}>Signal</th><th className={th}>Actions</th></tr></thead>
+          <thead><tr><th className={th}>Ticker</th><th className={th}>Entry date</th><th className={th}>Earnings</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Shares</th><th className={th}>Signal</th><th className={th}>Actions</th></tr></thead>
           <tbody>
             {pending.data?.map((t) => (
               <Row key={t.id} t={t}>
@@ -1516,7 +1571,7 @@ export function PlanTables() {
                 </span>
               </Row>
             ))}
-            {pending.data?.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500">No pending orders</td></tr>}
+            {pending.data?.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-slate-500">No pending orders</td></tr>}
           </tbody>
         </table>
       </section>
@@ -1524,7 +1579,7 @@ export function PlanTables() {
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-300">Active Positions</h2>
         <table className="w-full text-sm">
-          <thead><tr><th className={th}>Ticker</th><th className={th}>Entry date</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Shares</th><th className={th}>Signal</th><th className={th}>Actions</th></tr></thead>
+          <thead><tr><th className={th}>Ticker</th><th className={th}>Entry date</th><th className={th}>Earnings</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Shares</th><th className={th}>Signal</th><th className={th}>Actions</th></tr></thead>
           <tbody>
             {filled.data?.map((t) => (
               <Row key={t.id} t={t} flagged={t.dudFlagged}>
@@ -1539,7 +1594,7 @@ export function PlanTables() {
                 )}
               </Row>
             ))}
-            {filled.data?.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500">No active positions</td></tr>}
+            {filled.data?.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-slate-500">No active positions</td></tr>}
           </tbody>
         </table>
       </section>
@@ -1586,8 +1641,8 @@ const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 export function HistoryTable({ year }: { year: number }) {
   const q = useInfiniteQuery({
     queryKey: ['history', year],
-    queryFn: ({ pageParam }) => api.history(year, pageParam as number | null),
-    initialPageParam: null as number | null,
+    queryFn: ({ pageParam }) => api.history(year, pageParam as string | null),
+    initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });
   const sentinel = useRef<HTMLTableRowElement>(null);

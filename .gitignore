@@ -3,3 +3,4 @@ trading.db
 trading.db-*
 dist
 .env
+*.tsbuildinfo

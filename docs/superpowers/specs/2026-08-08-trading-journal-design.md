@@ -17,7 +17,7 @@ scroll, and a per-year performance summary with a cumulative equity curve.
 - **SQLite** (`better-sqlite3`) + **Drizzle ORM** + Drizzle Kit migrations
 - **Tailwind CSS** — styling
 - **TanStack Query** — data fetching, caching, infinite scroll, optimistic updates
-- **Recharts** — cumulative equity curve
+- **lightweight-charts** (TradingView) — cumulative equity curve
 - **Zod** — request validation + shared types
 - **Vitest** — tests
 
@@ -81,6 +81,7 @@ Cancel is only valid on `pending`; exit is only valid on `filled`.
 | `entry_type` | text | `buy_limit` \| `buy_stop` |
 | `entry_signal` | text | `btb` \| `buy_lautan` \| `buy_magenta` \| `hawk1` \| `buy_spec` |
 | `entry_date` | text (ISO `YYYY-MM-DD`) | default today, editable |
+| `earnings_date` | text (ISO) \| null | manually entered; **required at creation** (validation-enforced), editable later. DB column nullable to avoid NOT-NULL migration friction. No auto-fetch — entered by hand. |
 | `verify_days` | integer | 5 \| 7 \| 10 \| 14 |
 | `status` | text | `pending` \| `filled` \| `exited` |
 | `fill_date` | text (ISO) \| null | set when marked filled; dud-clock start |
@@ -129,7 +130,7 @@ and included in responses.
 | method + path | purpose |
 |---|---|
 | `GET /api/trades?status=pending\|filled` | Open rows for the top area (no pagination — small set). |
-| `GET /api/trades/history?year=<y>&cursor=<id>&limit=50` | Exited rows for a year, ordered `exit_date` DESC then `id` DESC (newest first, stable tie-break), keyset pagination (cursor = last seen id). Returns `{ items, nextCursor }`. |
+| `GET /api/trades/history?year=<y>&cursor=<exitDate\|id>&limit=50` | Exited rows for a year, ordered `exit_date` DESC then `id` DESC (newest first, stable tie-break), keyset pagination with a **composite cursor** `"<exitDate>\|<id>"` (last seen row). Filter: `exit_date < cExit OR (exit_date = cExit AND id < cId)`. An id-only cursor would drop/duplicate rows when trades exit out of creation order. Returns `{ items, nextCursor }` where `nextCursor` is that string or null. |
 | `GET /api/years` | Distinct years present in exited trades (drives year selector). |
 | `GET /api/summary?year=<y>` | `{ totalPnl, totalR, tradeCount, winRate, equityCurve: [{ exitDate, cumulativePnl }] }` ordered by exit date. `winRate` = (exited trades with `realized_pnl > 0`) / `tradeCount` for the year; `0` when `tradeCount` is 0. |
 | `POST /api/trades` | Create plan (status `pending`). Zod-validated. Also updates `last_upeti`. |
@@ -155,9 +156,11 @@ Single-page dashboard, top → bottom:
 
 2. **Yearly summary** (reacts to selected year) — stat tiles: **Total Realized P&L**
    ($, green/red), **Total R**, **Trade count**, **Win rate**; plus a **cumulative
-   equity curve** (Recharts, x = exit date, y = cumulative P&L, zero line marked).
+   equity curve** (lightweight-charts area series, x = exit date, y = cumulative P&L, zero price-line marked).
 
-3. **Current Trading Plan** — two sub-sections:
+3. **Current Trading Plan** — two sub-sections (both include an **Earnings** column
+   showing the manually-entered earnings date; earnings date is shown in the plan
+   tables only, not in Trading History):
    - **Pending Orders** — `Pending` pill; actions: **Mark Filled**, **Cancel**, **Edit**.
    - **Active Positions** (filled) — actions: **Exit**, **Edit**. Rows past their verify
      window with no decision get a **red highlight + "Verify" badge** and inline
@@ -172,8 +175,9 @@ Single-page dashboard, top → bottom:
 ### Forms (modal dialogs)
 - **Create:** Ticker, UPETI (prefilled with last value), Entry price, SL (required),
   TP (optional), Entry type (Buy Limit / Buy Stop), Entry signal (pill picker),
-  Entry date (default today), Verify-in days dropdown (5/7/10/14). Live-computed
-  preview of shares + risk using `lib/calc.ts`.
+  Entry date (default today), **Earnings date (required, manual date input)**,
+  Verify-in days dropdown (5/7/10/14). Live-computed preview of shares + risk
+  using `lib/calc.ts`.
 - **Exit:** exit price + exit date (default today).
 
 ### Reminder behavior
