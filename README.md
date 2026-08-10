@@ -40,10 +40,3 @@ Data lives in `trading.db` (gitignored).
 Set `FINNHUB_API_KEY` in `.env` (free key at finnhub.io; `.env.sample` lists it). When creating a plan, the
 earnings date auto-fills from Finnhub after you enter a ticker. Without a key the
 field simply stays manual — nothing else changes. The seed never calls the API.
-
-## Gmail trade sync (planned — not yet built)
-A "Sync now" feature to read broker BOUGHT/SOLD emails from a labeled Gmail folder
-and update the ledger (fill pending plans, create positions, exit into history),
-with a revertible batch per sync. Read-only OAuth. Design lives at
-`docs/superpowers/specs/2026-08-10-gmail-trade-sync-design.md`. Not implemented yet —
-setup instructions will be added here when Plan A lands.

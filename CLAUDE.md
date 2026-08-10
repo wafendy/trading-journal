@@ -50,7 +50,6 @@ specs) unless the user explicitly asks. Leave `bun.lock` alone (do not stage it)
 - Global settings: `app_settings` key-value table holds `upeti` and `verify_days`; `GET`/`PATCH /api/settings` (`repo.getSettings`/`setSettings`, defaults UPETI 100 / verifyDays 5). Edited via `SettingsControls` in the header; copied onto each new trade at creation.
 - Fill capture: "Mark filled" opens `FillModal` (fill date + required fill price, defaults to planned entry) → `POST /api/trades/:id/fill` with `{ fillDate, fillPrice }`.
 - History analytics: `GET /api/summary?year=` returns overall totals + `equityCurve` + `bySignal` (per-signal P&L/R/count/win-rate, signals with ≥1 exited trade). Rendered by `StatTiles`, `EquityChart` (overall cumulative curve only), and `SignalBreakdown` (table). All P&L in the route uses one `pnlOf` helper (cost basis `fillPrice ?? entryPrice`).
-- Gmail trade sync: **planned, not yet built** — design at `docs/superpowers/specs/2026-08-10-gmail-trade-sync-design.md`. Two-plan delivery (A: data-model + parser + OAuth CLI + status endpoint; B: sync engine + undo + UI). Adds the first third-party runtime dep (`googleapis`) and makes `entry_signal`/`upeti`/`sl_price` nullable for imports. Do not treat as implemented.
 
 ## Key domain rules
 
@@ -71,9 +70,6 @@ specs) unless the user explicitly asks. Leave `bun.lock` alone (do not stage it)
 - **Earnings date** is a required field on the create form and editable via PATCH. It
   auto-fills from Finnhub on ticker blur (see the earnings-lookup note above) but a
   manual edit always wins; without `FINNHUB_API_KEY` the field simply stays manual.
-- **Imported trades** (Gmail sync, once built) may have a null `entry_signal`, `upeti`,
-  and `sl_price`; user-created trades still require signal + prices via `createTradeSchema`.
-  `shares = actualShares ?? floor(upeti/(entry−sl))`; R is null when `upeti` is null.
 
 ## Testing
 
