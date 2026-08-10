@@ -13,7 +13,6 @@ export const createTradeSchema = z.object({
   tpPrice: z.number().positive().nullable().optional(),
   entryType,
   entrySignal,
-  entryDate: isoDate,
   earningsDate: isoDate,
   notes: z.string().max(2000).nullable().optional(),
   verifyDays,
@@ -29,13 +28,16 @@ export const patchTradeSchema = z.object({
   tpPrice: z.number().positive().nullable().optional(),
   entryType: entryType.optional(),
   entrySignal: entrySignal.optional(),
-  entryDate: isoDate.optional(),
   earningsDate: isoDate.optional(),
   notes: z.string().max(2000).nullable().optional(),
   verifyDays: verifyDays.optional(),
 });
 
-export const fillSchema = z.object({ fillDate: isoDate });
+export const fillSchema = z.object({ fillDate: isoDate, fillPrice: z.number().positive() });
+export const settingsSchema = z.object({
+  upeti: z.number().positive().optional(),
+  verifyDays: verifyDays.optional(),
+});
 export const cancelSchema = z.object({});
 export const exitSchema = z.object({ exitPrice: z.number().positive(), exitDate: isoDate });
 export const dudDecisionSchema = z.discriminatedUnion('decision', [
@@ -46,6 +48,7 @@ export const dudDecisionSchema = z.discriminatedUnion('decision', [
 export type CreateTradeInput = z.infer<typeof createTradeSchema>;
 export type PatchTradeInput = z.infer<typeof patchTradeSchema>;
 export type FillInput = z.infer<typeof fillSchema>;
+export type SettingsInput = z.infer<typeof settingsSchema>;
 export type CancelInput = z.infer<typeof cancelSchema>;
 export type ExitInput = z.infer<typeof exitSchema>;
 export type DudDecisionInput = z.infer<typeof dudDecisionSchema>;

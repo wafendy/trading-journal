@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { createTradeSchema, patchTradeSchema, dudDecisionSchema, exitSchema } from './validation';
+import { createTradeSchema, patchTradeSchema, dudDecisionSchema, exitSchema, fillSchema, settingsSchema } from './validation';
 
 describe('createTradeSchema', () => {
-  const valid = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', earningsDate: '2026-08-25', verifyDays: 5 };
+  const valid = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', verifyDays: 5 };
   it('accepts valid input and uppercases ticker', () => {
     const r = createTradeSchema.parse(valid);
     expect(r.ticker).toBe('AAPL');
@@ -51,5 +51,25 @@ describe('dudDecisionSchema', () => {
 describe('exitSchema', () => {
   it('requires price and date', () => {
     expect(() => exitSchema.parse({ exitPrice: 55 })).toThrow();
+  });
+});
+
+describe('fillSchema', () => {
+  it('requires fillDate and positive fillPrice', () => {
+    expect(fillSchema.parse({ fillDate: '2026-08-04', fillPrice: 52 })).toEqual({ fillDate: '2026-08-04', fillPrice: 52 });
+    expect(() => fillSchema.parse({ fillDate: '2026-08-04' })).toThrow();
+    expect(() => fillSchema.parse({ fillDate: '2026-08-04', fillPrice: 0 })).toThrow();
+  });
+});
+
+describe('settingsSchema', () => {
+  it('accepts partial updates', () => {
+    expect(settingsSchema.parse({ upeti: 250 })).toEqual({ upeti: 250 });
+    expect(settingsSchema.parse({ verifyDays: 7 })).toEqual({ verifyDays: 7 });
+    expect(settingsSchema.parse({})).toEqual({});
+  });
+  it('rejects bad values', () => {
+    expect(() => settingsSchema.parse({ upeti: -1 })).toThrow();
+    expect(() => settingsSchema.parse({ verifyDays: 3 })).toThrow();
   });
 });

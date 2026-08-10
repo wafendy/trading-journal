@@ -1,8 +1,19 @@
 import { Modal } from './ExitForm';
-import { SIGNAL_LABELS } from './SignalPill';
+import { SignalPill } from './SignalPill';
 import type { TradeDTO } from '../../lib/types';
+import type { ReactNode } from 'react';
 
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
+
+/** One label/value cell in the details grid. */
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">{children}</div>
+    </div>
+  );
+}
 
 /** Inline "has notes" indicator — a small document-with-lines glyph. */
 export function NoteIcon() {
@@ -32,32 +43,31 @@ const STATUS_LABEL: Record<TradeDTO['status'], string> = {
 
 /** Read-only details + notes for any trade, in any state. */
 export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () => void }) {
-  const rows: [string, string][] = [
-    ['Ticker', trade.ticker],
-    ['Status', STATUS_LABEL[trade.status]],
-    ['Entry signal', SIGNAL_LABELS[trade.entrySignal]],
-    ['Entry type', trade.entryType === 'buy_limit' ? 'Buy Limit' : 'Buy Stop'],
-    ['Entry', `${money(trade.entryPrice)}  (${trade.entryDate})`],
-    ['SL / TP', `${money(trade.slPrice)} / ${money(trade.tpPrice)}`],
-    ['Shares', String(trade.shares)],
-    ['Earnings', trade.earningsDate ?? '—'],
-  ];
-  if (trade.status === 'exited') {
-    rows.push(['Exit', `${money(trade.exitPrice)}  (${trade.exitDate ?? '—'})`]);
-    rows.push([
-      'Realized P&L',
-      `${money(trade.realizedPnl)}${trade.rMultiple != null ? `  (${trade.rMultiple >= 0 ? '+' : ''}${trade.rMultiple.toFixed(2)}R)` : ''}`,
-    ]);
-  }
+  const { entryPrice, slPrice, tpPrice } = trade;
+  // Risk/Reward = (TP − entry) / (entry − SL), when both risk and reward are defined.
+  const rr = tpPrice != null && slPrice != null && entryPrice > slPrice && tpPrice >= entryPrice
+    ? (tpPrice - entryPrice) / (entryPrice - slPrice)
+    : null;
+  const pnl = trade.realizedPnl != null
+    ? `${money(trade.realizedPnl)}${trade.rMultiple != null ? ` (${trade.rMultiple >= 0 ? '+' : ''}${trade.rMultiple.toFixed(2)}R)` : ''}`
+    : '—';
   return (
     <Modal title={`${trade.ticker} — trade details`} onClose={onClose}>
-      <div className="space-y-1 text-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4">
-            <span className="text-slate-500 dark:text-slate-400">{k}</span>
-            <span className="font-medium text-slate-900 dark:text-slate-100">{v}</span>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <Field label="Status">{STATUS_LABEL[trade.status]}</Field>
+        <div />
+        <Field label="Entry signal"><SignalPill signal={trade.entrySignal} /></Field>
+        <Field label="Entry type">{trade.entryType === 'buy_limit' ? 'Buy Limit' : 'Buy Stop'}</Field>
+        <Field label="Fill price">{money(trade.fillPrice)}</Field>
+        <Field label="Fill date">{trade.fillDate ?? '—'}</Field>
+        <Field label="SL / TP">{`${money(trade.slPrice)} / ${money(trade.tpPrice)}`}</Field>
+        <Field label="Earnings date">{trade.earningsDate ?? '—'}</Field>
+        <Field label="Shares">{String(trade.shares)}</Field>
+        <Field label="UPETI">{money(trade.upeti)}</Field>
+        <Field label="Exit price">{money(trade.exitPrice)}</Field>
+        <Field label="Exit date">{trade.exitDate ?? '—'}</Field>
+        <Field label="Realized P&L">{pnl}</Field>
+        <Field label="Risk / Reward">{rr != null ? `1 : ${rr.toFixed(2)}` : '—'}</Field>
       </div>
       <div className="mt-4">
         <div className="mb-1 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</div>

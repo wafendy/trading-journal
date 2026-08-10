@@ -14,12 +14,12 @@ export interface TradeRepo {
   years(): number[];
   getById(id: number): TradeRow | undefined;
   patch(id: number, input: PatchTradeInput): TradeRow;
-  fill(id: number, fillDate: string): TradeRow;
+  fill(id: number, fillDate: string, fillPrice: number): TradeRow;
   cancel(id: number): void;
   exit(id: number, exitPrice: number, exitDate: string): TradeRow;
   dudKeep(id: number): TradeRow;
-  getLastUpeti(): number | null;
-  setLastUpeti(v: number): void;
+  getSettings(): { upeti: number; verifyDays: number };
+  setSettings(input: { upeti?: number; verifyDays?: number }): void;
 }
 
 export function createRepo(db: DB, now: () => string): TradeRepo {
@@ -35,10 +35,9 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       const row = db.insert(trades).values({
         ticker: input.ticker, upeti: input.upeti, entryPrice: input.entryPrice, slPrice: input.slPrice,
         tpPrice: input.tpPrice ?? null, entryType: input.entryType, entrySignal: input.entrySignal,
-        entryDate: input.entryDate, earningsDate: input.earningsDate, notes: input.notes ?? null, verifyDays: input.verifyDays, status: 'pending',
-        fillDate: null, dudDecision: null, exitPrice: null, exitDate: null, createdAt: ts, updatedAt: ts,
+        earningsDate: input.earningsDate, notes: input.notes ?? null, verifyDays: input.verifyDays, status: 'pending',
+        fillDate: null, fillPrice: null, dudDecision: null, exitPrice: null, exitDate: null, createdAt: ts, updatedAt: ts,
       }).returning().get() as TradeRow;
-      this.setLastUpeti(input.upeti);
       return row;
     },
     list(status) {
@@ -76,10 +75,10 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       db.update(trades).set({ ...input, updatedAt: now() }).where(eq(trades.id, id)).run();
       return require(id);
     },
-    fill(id, fillDate) {
+    fill(id, fillDate, fillPrice) {
       const t = require(id);
       if (t.status !== 'pending') throw new ConflictError('only pending orders can be filled');
-      db.update(trades).set({ status: 'filled', fillDate, updatedAt: now() }).where(eq(trades.id, id)).run();
+      db.update(trades).set({ status: 'filled', fillDate, fillPrice, updatedAt: now() }).where(eq(trades.id, id)).run();
       return require(id);
     },
     cancel(id) {
@@ -99,13 +98,19 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       db.update(trades).set({ dudDecision: 'keep', updatedAt: now() }).where(eq(trades.id, id)).run();
       return require(id);
     },
-    getLastUpeti() {
-      const r = db.select().from(appSettings).where(eq(appSettings.key, 'last_upeti')).get();
-      return r ? Number(r.value) : null;
+    getSettings() {
+      const rows = db.select().from(appSettings).all();
+      const map = new Map(rows.map((r) => [r.key, r.value]));
+      const upeti = map.has('upeti') ? Number(map.get('upeti')) : 100;
+      const verifyDays = map.has('verify_days') ? Number(map.get('verify_days')) : 5;
+      return { upeti, verifyDays };
     },
-    setLastUpeti(v) {
-      db.insert(appSettings).values({ key: 'last_upeti', value: String(v) })
-        .onConflictDoUpdate({ target: appSettings.key, set: { value: String(v) } }).run();
+    setSettings(input) {
+      const put = (key: string, value: string) =>
+        db.insert(appSettings).values({ key, value })
+          .onConflictDoUpdate({ target: appSettings.key, set: { value } }).run();
+      if (input.upeti !== undefined) put('upeti', String(input.upeti));
+      if (input.verifyDays !== undefined) put('verify_days', String(input.verifyDays));
     },
   };
 }

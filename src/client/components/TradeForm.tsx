@@ -40,13 +40,26 @@ export function TradeForm({ open, onClose }: { open: boolean; onClose: () => voi
   const [tpEdited, setTpEdited] = useState(false);
   const [entryType, setEntryType] = useState<EntryType>('buy_limit');
   const [entrySignal, setEntrySignal] = useState<EntrySignal>('buy_lautan');
-  const [entryDate, setEntryDate] = useState(todayISO());
   const [earningsDate, setEarningsDate] = useState('');
-  const [notes, setNotes] = useState('');
-  const [verifyDays, setVerifyDays] = useState(5);
+  const [earningsStatus, setEarningsStatus] = useState<'idle' | 'loading' | 'fetched' | 'notfound'>('idle');
+  const [earningsEdited, setEarningsEdited] = useState(false);
+  const [lastLookedUp, setLastLookedUp] = useState('');
 
-  // Prefill UPETI with the last value entered; default to $100 when none is remembered yet.
-  useEffect(() => { if (settings.data) setUpeti(String(settings.data.lastUpeti ?? 100)); }, [settings.data]);
+  const lookupEarnings = async () => {
+    const t = ticker.trim().toUpperCase();
+    if (!t || t === lastLookedUp || earningsEdited) return;
+    setLastLookedUp(t);
+    setEarningsStatus('loading');
+    try {
+      const { earningsDate: found } = await api.earnings(t);
+      if (found && !earningsEdited) { setEarningsDate(found); setEarningsStatus('fetched'); }
+      else setEarningsStatus('notfound');
+    } catch { setEarningsStatus('notfound'); }
+  };
+  const [notes, setNotes] = useState('');
+
+  // Prefill UPETI from the global setting (snapshotted onto the trade at creation).
+  useEffect(() => { if (settings.data) setUpeti(String(settings.data.upeti)); }, [settings.data]);
 
   // Auto-fill SL (5% below) and TP (10% above) from entry price, unless the
   // user has manually edited that field.
@@ -69,34 +82,55 @@ export function TradeForm({ open, onClose }: { open: boolean; onClose: () => voi
   const rr = e > s && s > 0 && tpPrice !== '' && tp >= e ? (tp - e) / (e - s) : null;
 
   const today = todayISO();
-  const entryDateError = entryDate !== '' && entryDate < today ? 'Entry date cannot be in the past' : '';
   const earningsDateError = earningsDate !== '' && earningsDate < today ? 'Earnings date cannot be in the past' : '';
+
+  // Clear the form back to a pristine state so the next open starts empty.
+  // UPETI resets to the current global default (not blank).
+  const reset = () => {
+    setTicker('');
+    setUpeti(String(settings.data?.upeti ?? 100));
+    setEntryPrice('');
+    setSlPrice('');
+    setTpPrice('');
+    setSlEdited(false);
+    setTpEdited(false);
+    setEntryType('buy_limit');
+    setEntrySignal('buy_lautan');
+    setEarningsDate('');
+    setEarningsStatus('idle');
+    setEarningsEdited(false);
+    setLastLookedUp('');
+    setNotes('');
+  };
 
   const m = useMutation({
     mutationFn: () => api.create({
       ticker, upeti: Number(upeti), entryPrice: Number(entryPrice), slPrice: Number(slPrice),
-      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, entryDate, earningsDate, notes: notes.trim() || null, verifyDays,
+      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, earningsDate, notes: notes.trim() || null, verifyDays: settings.data?.verifyDays ?? 5,
     }),
-    onSuccess: () => { qc.invalidateQueries(); toast('Trade plan created'); onClose(); },
+    onSuccess: () => { qc.invalidateQueries(); toast('Trade plan created'); reset(); onClose(); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
   });
 
   if (!open) return null;
-  const valid = ticker && u > 0 && e > s && s > 0 && earningsDate && !slError && !tpError && !entryDateError && !earningsDateError;
+  const valid = ticker && u > 0 && e > s && s > 0 && earningsDate && !slError && !tpError && !earningsDateError;
   return (
     <Modal title="New Trade Plan" onClose={onClose}>
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
-        <label>UPETI (risk $)<input type="number" step="any" value={upeti} onChange={(e) => setUpeti(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
-        <label>Entry price<input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        {/* Row 1 */}
+        <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} onBlur={lookupEarnings} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
+        <label>Earnings date<input type="date" min={today} value={earningsDate} onChange={(ev) => { setEarningsEdited(true); setEarningsStatus('idle'); setEarningsDate(rollForward90(ev.target.value)); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${earningsDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{earningsDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{earningsDateError}</span>}{!earningsDateError && earningsStatus === 'loading' && <span className="mt-1 block text-xs text-slate-400">Looking up earnings…</span>}{!earningsDateError && earningsStatus === 'fetched' && <span className="mt-1 block text-xs text-slate-400">Fetched from Finnhub</span>}{!earningsDateError && earningsStatus === 'notfound' && <span className="mt-1 block text-xs text-slate-400">No earnings date found — enter manually</span>}</label>
+        <div />
+        {/* Row 2 */}
+        <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
         <label>Entry type<select value={entryType} onChange={(e) => setEntryType(e.target.value as EntryType)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1"><option value="buy_limit">Buy Limit</option><option value="buy_stop">Buy Stop</option></select></label>
+        <div />
+        {/* Row 3 */}
+        <label>Entry price<input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         <label>SL price<input type="number" step="any" value={slPrice} onChange={(ev) => { setSlEdited(true); setSlPrice(ev.target.value); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${slError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{slError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{slError}</span>}</label>
         <label>TP price (optional)<input type="number" step="any" value={tpPrice} onChange={(ev) => { setTpEdited(true); setTpPrice(ev.target.value); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${tpError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{tpError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{tpError}</span>}</label>
-        <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
-        <label>Entry date<input type="date" min={today} value={entryDate} onChange={(ev) => setEntryDate(ev.target.value)} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${entryDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{entryDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{entryDateError}</span>}</label>
-        <label>Earnings date<input type="date" min={today} value={earningsDate} onChange={(ev) => setEarningsDate(rollForward90(ev.target.value))} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${earningsDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{earningsDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{earningsDateError}</span>}</label>
-        <label>Verify in<select value={verifyDays} onChange={(e) => setVerifyDays(Number(e.target.value))} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{[5,7,10,14].map((d) => <option key={d} value={d}>{d} days</option>)}</select></label>
-        <label className="col-span-2">Notes (optional)<textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Thesis, setup, risks…" className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
+        {/* Notes */}
+        <label className="col-span-3">Notes (optional)<textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Thesis, setup, risks…" className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
       </div>
       <div className="mt-3 flex gap-6 text-sm text-slate-600 dark:text-slate-300">
         <div>Position size: <span className="font-semibold text-slate-900 dark:text-slate-100">{shares} shares</span></div>

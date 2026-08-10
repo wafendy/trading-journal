@@ -13,12 +13,12 @@ export interface TradeRow {
   tpPrice: number | null;
   entryType: EntryType;
   entrySignal: EntrySignal;
-  entryDate: string;
   earningsDate: string | null;
   notes: string | null;
   verifyDays: number;
   status: TradeStatus;
   fillDate: string | null;
+  fillPrice: number | null;
   dudDecision: DudDecision;
   exitPrice: number | null;
   exitDate: string | null;

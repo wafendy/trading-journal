@@ -53,8 +53,8 @@ describe('isDudFlagged', () => {
 describe('deriveTrade', () => {
   const row: TradeRow = {
     id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: 60,
-    entryType: 'buy_limit', entrySignal: 'btb', entryDate: '2026-08-03', earningsDate: '2026-08-25', notes: null, verifyDays: 5,
-    status: 'exited', fillDate: '2026-08-03', dudDecision: null, exitPrice: 55, exitDate: '2026-08-20',
+    entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', notes: null, verifyDays: 5,
+    status: 'exited', fillDate: '2026-08-03', fillPrice: null, dudDecision: null, exitPrice: 55, exitDate: '2026-08-20',
     createdAt: '2026-08-03T00:00:00Z', updatedAt: '2026-08-20T00:00:00Z',
   };
   it('computes shares, pnl, r for exited', () => {
@@ -68,5 +68,25 @@ describe('deriveTrade', () => {
     const d = deriveTrade({ ...row, status: 'filled', exitPrice: null, exitDate: null }, '2026-08-21');
     expect(d.realizedPnl).toBeNull();
     expect(d.rMultiple).toBeNull();
+  });
+});
+
+describe('deriveTrade cost basis', () => {
+  const base: TradeRow = {
+    id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: null,
+    entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', notes: null,
+    verifyDays: 5, status: 'exited', fillDate: '2026-08-04', fillPrice: 52, dudDecision: null,
+    exitPrice: 60, exitDate: '2026-08-20', createdAt: 'x', updatedAt: 'x',
+  };
+  it('uses fillPrice as cost basis when present', () => {
+    // shares = floor(1000/(50-45)) = 200; pnl = (60-52)*200 = 1600
+    const d = deriveTrade(base, '2026-08-21');
+    expect(d.shares).toBe(200);
+    expect(d.realizedPnl).toBe(1600);
+  });
+  it('falls back to entryPrice when fillPrice is null', () => {
+    // pnl = (60-50)*200 = 2000
+    const d = deriveTrade({ ...base, fillPrice: null }, '2026-08-21');
+    expect(d.realizedPnl).toBe(2000);
   });
 });

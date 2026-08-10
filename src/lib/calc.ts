@@ -41,7 +41,8 @@ export function isDudFlagged(
 export function deriveTrade(row: TradeRow, todayISO: string): TradeDTO {
   const shares = computeShares(row.upeti, row.entryPrice, row.slPrice);
   const exited = row.status === 'exited' && row.exitPrice !== null;
-  const realizedPnl = exited ? computePnl(row.entryPrice, row.exitPrice as number, shares) : null;
+  const costBasis = row.fillPrice ?? row.entryPrice;
+  const realizedPnl = exited ? computePnl(costBasis, row.exitPrice as number, shares) : null;
   const rMultiple = realizedPnl !== null ? computeR(realizedPnl, row.upeti) : null;
   return { ...row, shares, realizedPnl, rMultiple, dudFlagged: isDudFlagged(row, todayISO) };
 }

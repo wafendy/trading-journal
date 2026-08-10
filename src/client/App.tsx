@@ -4,10 +4,12 @@ import { api } from './api';
 import { YearSelector } from './components/YearSelector';
 import { StatTiles } from './components/StatTiles';
 import { EquityChart } from './components/EquityChart';
+import { SignalBreakdown } from './components/SignalBreakdown';
 import { PendingOrders, ActivePositions } from './components/PlanTables';
 import { HistoryTable } from './components/HistoryTable';
 import { TradeForm } from './components/TradeForm';
 import { ThemeToggle } from './components/ThemeToggle';
+import { SettingsControls } from './components/SettingsControls';
 
 type Tab = 'pending' | 'active' | 'history';
 
@@ -39,6 +41,7 @@ export default function App() {
         <header className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Trading Journal</h1>
           <div className="flex items-center gap-3">
+            <SettingsControls />
             <button onClick={() => setFormOpen(true)} className="cursor-pointer rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white">+ New Trade Plan</button>
             <ThemeToggle />
           </div>
@@ -70,17 +73,20 @@ export default function App() {
         {tab === 'active' && <ActivePositions />}
         {tab === 'history' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Performance</h2>
-              <YearSelector years={years.data ?? []} selected={year} onSelect={setYear} />
-            </div>
             {year !== null && summary.data && (
-              <section className="space-y-4">
-                <StatTiles summary={summary.data} />
-                <div className="rounded-xl bg-slate-100 p-4 dark:bg-slate-800/40"><EquityChart data={summary.data.equityCurve} /></div>
-              </section>
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Performance</h2>
+                  <YearSelector years={years.data ?? []} selected={year} onSelect={setYear} />
+                </div>
+                <section className="space-y-4">
+                  <StatTiles summary={summary.data} />
+                  <div className="rounded-xl bg-slate-100 p-4 dark:bg-slate-800/40"><EquityChart data={summary.data.equityCurve} /></div>
+                  <SignalBreakdown rows={summary.data.bySignal} />
+                </section>
+              </>
             )}
-            {year !== null ? <HistoryTable year={year} /> : <p className="text-sm text-slate-500">No exited trades yet.</p>}
+            <HistoryTable year={year} />
           </div>
         )}
 

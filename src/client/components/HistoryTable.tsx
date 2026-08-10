@@ -7,12 +7,13 @@ import type { TradeDTO } from '../../lib/types';
 
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
-export function HistoryTable({ year }: { year: number }) {
+export function HistoryTable({ year }: { year: number | null }) {
   const q = useInfiniteQuery({
     queryKey: ['history', year],
-    queryFn: ({ pageParam }) => api.history(year, pageParam as string | null),
+    queryFn: ({ pageParam }) => api.history(year as number, pageParam as string | null),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
+    enabled: year !== null,
   });
   const [selected, setSelected] = useState<TradeDTO | null>(null);
   const sentinel = useRef<HTMLTableRowElement>(null);
@@ -27,11 +28,11 @@ export function HistoryTable({ year }: { year: number }) {
   const th = 'px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400';
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Trading History <span className="font-normal text-slate-400">— click a row for notes &amp; details</span></h2>
+      <h2 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Trading History</h2>
       <table className="w-full text-sm">
         <thead><tr>
           <th className={th}>Ticker</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Shares</th>
-          <th className={th}>Exit</th><th className={th}>Signal</th><th className={th}>Realized P&L</th>
+          <th className={th}>Exit</th><th className={th}>Signal</th><th className={th}>UPETI</th><th className={th}>Realized P&L</th>
         </tr></thead>
         <tbody>
           {rows.map((t) => (
@@ -46,7 +47,9 @@ export function HistoryTable({ year }: { year: number }) {
               </td>
               <td className="px-3 py-2">
                 <div>{money(t.entryPrice)}</div>
-                <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">{t.entryDate}</div>
+                <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                  {t.fillDate ? `filled @ ${money(t.fillPrice)} · ${t.fillDate}` : '—'}
+                </div>
               </td>
               <td className="px-3 py-2">{money(t.slPrice)}</td>
               <td className="px-3 py-2">{money(t.tpPrice)}</td>
@@ -56,12 +59,13 @@ export function HistoryTable({ year }: { year: number }) {
                 <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">{t.exitDate}</div>
               </td>
               <td className="px-3 py-2"><SignalPill signal={t.entrySignal} /></td>
+              <td className="px-3 py-2">{money(t.upeti)}</td>
               <td className={`px-3 py-2 font-semibold ${(t.realizedPnl ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {money(t.realizedPnl)} <span className="text-xs text-slate-500 dark:text-slate-400">({t.rMultiple != null ? `${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)}R` : '—'})</span>
               </td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-500">No trades for {year}</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-slate-500 dark:text-slate-500">No exited trades yet.</td></tr>}
           <tr ref={sentinel} />
         </tbody>
       </table>

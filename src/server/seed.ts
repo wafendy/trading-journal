@@ -56,6 +56,7 @@ if (existing && existing.n > 0 && !force) {
 if (force) wipe();
 
 const repo = createRepo(db, () => new Date().toISOString());
+repo.setSettings({ upeti: 100, verifyDays: 5 });
 
 // ── Deterministic PRNG (seeded) so runs are reproducible ────────────────────
 let _s = 0x2f6e2b1;
@@ -66,6 +67,8 @@ const rnd = () => {
 const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rnd() * arr.length)]!;
 const between = (lo: number, hi: number) => lo + rnd() * (hi - lo);
 const round2 = (n: number) => Math.round(n * 100) / 100;
+// Simulated fill price: within ±1% of the planned entry (real fills rarely hit exactly).
+const jitterFill = (entry: number) => round2(entry * between(0.99, 1.01));
 
 // ── Date helpers (relative to REAL today) ───────────────────────────────────
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -96,19 +99,19 @@ const NOTES_POOL = [
 
 interface PlanSeed {
   ticker: string; upeti: number; entryPrice: number; slPrice: number; tpPrice?: number | null;
-  entryType: EntryType; entrySignal: EntrySignal; entryDate: string; earningsDate: string;
+  entryType: EntryType; entrySignal: EntrySignal; earningsDate: string;
   notes?: string | null; verifyDays: VerifyDays;
 }
 const mk = (p: PlanSeed) =>
   repo.create({
     ticker: p.ticker, upeti: p.upeti, entryPrice: p.entryPrice, slPrice: p.slPrice, tpPrice: p.tpPrice ?? null,
-    entryType: p.entryType, entrySignal: p.entrySignal, entryDate: p.entryDate, earningsDate: p.earningsDate,
+    entryType: p.entryType, entrySignal: p.entrySignal, earningsDate: p.earningsDate,
     notes: p.notes ?? null, verifyDays: p.verifyDays,
   });
 const clearEarnings = (id: number) => db.update(trades).set({ earningsDate: null }).where(eq(trades.id, id)).run();
 
-// A randomized plan around a base price. entryDate/earningsDate supplied by caller.
-function randomPlan(entryDate: string, earningsDate: string, withNote: boolean): PlanSeed {
+// A randomized plan around a base price. earningsDate supplied by caller.
+function randomPlan(earningsDate: string, withNote: boolean): PlanSeed {
   const entry = round2(between(15, 600));
   return {
     ticker: pick(TICKERS),
@@ -118,7 +121,6 @@ function randomPlan(entryDate: string, earningsDate: string, withNote: boolean):
     tpPrice: rnd() < 0.8 ? round2(entry * between(1.05, 1.25)) : null,
     entryType: pick(TYPES),
     entrySignal: pick(SIGNALS),
-    entryDate,
     earningsDate,
     notes: withNote ? pick(NOTES_POOL) : null,
     verifyDays: pick(VERIFY),
@@ -129,36 +131,35 @@ function randomPlan(entryDate: string, earningsDate: string, withNote: boolean):
 // First 5 cover each signal (btb, buy_lautan, buy_magenta, hawk1, buy_spec),
 // then 5 more are random, for 10 total.
 SIGNALS.forEach((signal, i) => {
-  const entryDate = daysFromNow(i % 6);
-  mk({ ...randomPlan(entryDate, daysFromNow(60 + i * 3), rnd() < 0.5), entrySignal: signal });
+  mk({ ...randomPlan(daysFromNow(60 + i * 3), rnd() < 0.5), entrySignal: signal });
 });
 for (let i = 0; i < 5; i++) {
-  const entryDate = daysFromNow(i % 6);
-  mk(randomPlan(entryDate, daysFromNow(75 + i * 3), rnd() < 0.5));
+  mk(randomPlan(daysFromNow(75 + i * 3), rnd() < 0.5));
 }
 
 // ── Active positions (≤25) ───────────────────────────────────────────────────
 // First, the six labelled demo conditions (stable tickers), then fill to ~22.
 const demoActive: { plan: PlanSeed; fill: string; keep?: boolean; nullEarn?: boolean }[] = [
-  { plan: { ticker: 'TSLA', upeti: 1000, entryPrice: 330, slPrice: 300, tpPrice: 400, entryType: 'buy_limit', entrySignal: 'buy_magenta', entryDate: daysFromNow(-30), earningsDate: daysFromNow(60), notes: 'Held past verify window — decide keep/exit.', verifyDays: 5 }, fill: daysFromNow(-25) }, // dud-flagged
-  { plan: { ticker: 'NVDA', upeti: 1200, entryPrice: 178, slPrice: 168, tpPrice: 210, entryType: 'buy_stop', entrySignal: 'hawk1', entryDate: todayISO, earningsDate: daysFromNow(70), notes: 'Fresh add on strength.', verifyDays: 7 }, fill: todayISO }, // fresh
-  { plan: { ticker: 'MSFT', upeti: 800, entryPrice: 505, slPrice: 480, entryType: 'buy_limit', entrySignal: 'btb', entryDate: daysFromNow(-40), earningsDate: daysFromNow(65), verifyDays: 5 }, fill: daysFromNow(-38), keep: true }, // kept
-  { plan: { ticker: 'GOOGL', upeti: 650, entryPrice: 165, slPrice: 156.75, tpPrice: 181.5, entryType: 'buy_limit', entrySignal: 'buy_lautan', entryDate: daysFromNow(-1), earningsDate: daysFromNow(3), notes: 'Earnings in a few days — watch closely.', verifyDays: 10 }, fill: todayISO }, // earnings 3d
-  { plan: { ticker: 'AMZN', upeti: 700, entryPrice: 205, slPrice: 194.75, tpPrice: 225.5, entryType: 'buy_stop', entrySignal: 'btb', entryDate: daysFromNow(-1), earningsDate: todayISO, verifyDays: 7 }, fill: todayISO }, // earnings today
-  { plan: { ticker: 'COIN', upeti: 500, entryPrice: 250, slPrice: 237.5, tpPrice: 275, entryType: 'buy_limit', entrySignal: 'buy_spec', entryDate: daysFromNow(-1), earningsDate: daysFromNow(50), verifyDays: 7 }, fill: todayISO, nullEarn: true }, // missing earnings
+  { plan: { ticker: 'TSLA', upeti: 1000, entryPrice: 330, slPrice: 300, tpPrice: 400, entryType: 'buy_limit', entrySignal: 'buy_magenta', earningsDate: daysFromNow(60), notes: 'Held past verify window — decide keep/exit.', verifyDays: 5 }, fill: daysFromNow(-25) }, // dud-flagged
+  { plan: { ticker: 'NVDA', upeti: 1200, entryPrice: 178, slPrice: 168, tpPrice: 210, entryType: 'buy_stop', entrySignal: 'hawk1', earningsDate: daysFromNow(70), notes: 'Fresh add on strength.', verifyDays: 7 }, fill: todayISO }, // fresh
+  { plan: { ticker: 'MSFT', upeti: 800, entryPrice: 505, slPrice: 480, entryType: 'buy_limit', entrySignal: 'btb', earningsDate: daysFromNow(65), verifyDays: 5 }, fill: daysFromNow(-38), keep: true }, // kept
+  { plan: { ticker: 'GOOGL', upeti: 650, entryPrice: 165, slPrice: 156.75, tpPrice: 181.5, entryType: 'buy_limit', entrySignal: 'buy_lautan', earningsDate: daysFromNow(3), notes: 'Earnings in a few days — watch closely.', verifyDays: 10 }, fill: todayISO }, // earnings 3d
+  { plan: { ticker: 'AMZN', upeti: 700, entryPrice: 205, slPrice: 194.75, tpPrice: 225.5, entryType: 'buy_stop', entrySignal: 'btb', earningsDate: todayISO, verifyDays: 7 }, fill: todayISO }, // earnings today
+  { plan: { ticker: 'COIN', upeti: 500, entryPrice: 250, slPrice: 237.5, tpPrice: 275, entryType: 'buy_limit', entrySignal: 'buy_spec', earningsDate: daysFromNow(50), verifyDays: 7 }, fill: todayISO, nullEarn: true }, // missing earnings
 ];
 for (const a of demoActive) {
   const t = mk(a.plan);
-  repo.fill(t.id, a.fill);
+  repo.fill(t.id, a.fill, jitterFill(a.plan.entryPrice));
   if (a.keep) repo.dudKeep(t.id);
   if (a.nullEarn) clearEarnings(t.id);
 }
 // Extra active positions (filled recently so not dud-flagged), up to ~22 total.
 const EXTRA_ACTIVE = 16;
 for (let i = 0; i < EXTRA_ACTIVE; i++) {
-  const entryDate = daysFromNow(-(1 + Math.floor(rnd() * 3)));
-  const t = mk(randomPlan(entryDate, daysFromNow(20 + Math.floor(rnd() * 80)), rnd() < 0.5));
-  repo.fill(t.id, entryDate);
+  const fillDate = daysFromNow(-(1 + Math.floor(rnd() * 3)));
+  const plan = randomPlan(daysFromNow(20 + Math.floor(rnd() * 80)), rnd() < 0.5);
+  const t = mk(plan);
+  repo.fill(t.id, fillDate, jitterFill(plan.entryPrice));
 }
 
 // ── Exited trades → Trading History (100+ total) ─────────────────────────────
@@ -184,13 +185,13 @@ for (const [yStr, target] of Object.entries(perYear)) {
     if (exitDate > todayISO) continue; // history is realized/past only
     const entryDate = addDaysISO(exitDate, -(10 + Math.floor(rnd() * 90)));
     const fillDate = addDaysISO(entryDate, 1);
-    const plan = randomPlan(entryDate, addDaysISO(entryDate, 30), rnd() < 0.5);
+    const plan = randomPlan(addDaysISO(entryDate, 30), rnd() < 0.5);
     const win = rnd() < 0.58; // ~58% win rate
     const exitPrice = win
       ? round2(plan.entryPrice * between(1.03, 1.3))
       : round2(plan.entryPrice * between(0.82, 0.99));
     const t = mk(plan);
-    repo.fill(t.id, fillDate);
+    repo.fill(t.id, fillDate, plan.entryPrice);
     repo.exit(t.id, exitPrice, exitDate);
     made++; created++;
   }

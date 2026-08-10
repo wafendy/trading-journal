@@ -10,16 +10,15 @@ function setup() {
   return { repo, setClock: (c: string) => (clock = c) };
 }
 
-const base = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit' as const, entrySignal: 'btb' as const, entryDate: '2026-08-03', earningsDate: '2026-08-25', verifyDays: 5 as const };
+const base = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit' as const, entrySignal: 'btb' as const, earningsDate: '2026-08-25', verifyDays: 5 as const };
 
 describe('create + lifecycle', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => { ctx = setup(); });
 
-  it('creates pending and remembers upeti', () => {
+  it('creates pending', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
     expect(t.status).toBe('pending');
-    expect(ctx.repo.getLastUpeti()).toBe(1000);
   });
 
   it('persists notes on create and defaults to null', () => {
@@ -37,7 +36,7 @@ describe('create + lifecycle', () => {
 
   it('fill then exit moves to history', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
-    ctx.repo.fill(t.id, '2026-08-04');
+    ctx.repo.fill(t.id, '2026-08-04', 50);
     expect(ctx.repo.getById(t.id)!.status).toBe('filled');
     ctx.repo.exit(t.id, 55, '2026-08-20');
     const done = ctx.repo.getById(t.id)!;
@@ -53,7 +52,7 @@ describe('create + lifecycle', () => {
 
   it('cannot cancel a filled order', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
-    ctx.repo.fill(t.id, '2026-08-04');
+    ctx.repo.fill(t.id, '2026-08-04', 50);
     expect(() => ctx.repo.cancel(t.id)).toThrow(ConflictError);
   });
 
@@ -80,10 +79,36 @@ describe('create + lifecycle', () => {
   });
 });
 
+describe('fill captures price', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => { ctx = setup(); });
+  it('persists fillDate and fillPrice', () => {
+    const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
+    const f = ctx.repo.fill(t.id, '2026-08-04', 52);
+    expect(f.status).toBe('filled');
+    expect(f.fillDate).toBe('2026-08-04');
+    expect(f.fillPrice).toBe(52);
+  });
+});
+
+describe('settings', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => { ctx = setup(); });
+  it('defaults when unset', () => {
+    expect(ctx.repo.getSettings()).toEqual({ upeti: 100, verifyDays: 5 });
+  });
+  it('round-trips partial updates', () => {
+    ctx.repo.setSettings({ upeti: 250 });
+    expect(ctx.repo.getSettings()).toEqual({ upeti: 250, verifyDays: 5 });
+    ctx.repo.setSettings({ verifyDays: 7 });
+    expect(ctx.repo.getSettings()).toEqual({ upeti: 250, verifyDays: 7 });
+  });
+});
+
 describe('history + years', () => {
   const mkExited = (repo: ReturnType<typeof createRepo>, exitDate: string) => {
     const t = repo.create({ ...base, ticker: 'AAPL' });
-    repo.fill(t.id, '2025-01-02');
+    repo.fill(t.id, '2025-01-02', 50);
     repo.exit(t.id, 55, exitDate);
     return t.id;
   };
@@ -91,7 +116,7 @@ describe('history + years', () => {
   it('filters by exit year, newest first, paginates (monotonic ids)', () => {
     const { repo } = setup();
     mkExited(repo, '2025-03-01'); mkExited(repo, '2025-04-01'); mkExited(repo, '2025-05-01');
-    const t2024 = repo.create({ ...base }); repo.fill(t2024.id, '2024-01-02'); repo.exit(t2024.id, 55, '2024-06-01');
+    const t2024 = repo.create({ ...base }); repo.fill(t2024.id, '2024-01-02', 50); repo.exit(t2024.id, 55, '2024-06-01');
 
     expect(repo.years()).toEqual([2025, 2024]);
     const page1 = repo.history(2025, null, 2);

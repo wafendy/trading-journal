@@ -10,9 +10,9 @@
   "scripts": {
     "dev": "run-p dev:*",
     "dev:client": "vite",
-    "dev:server": "tsx watch src/server/index.ts",
+    "dev:server": "tsx watch --env-file=.env src/server/index.ts",
     "build": "tsc -b && vite build",
-    "start": "NODE_ENV=production tsx src/server/index.ts",
+    "start": "NODE_ENV=production tsx --env-file=.env src/server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",

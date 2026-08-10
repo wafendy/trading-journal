@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import type { TradeRepo } from './repository';
 import { NotFoundError, ConflictError } from './repository';
-import { createTradeSchema, patchTradeSchema, fillSchema, exitSchema, dudDecisionSchema } from './validation';
+import { createTradeSchema, patchTradeSchema, fillSchema, exitSchema, dudDecisionSchema, settingsSchema } from './validation';
 import { deriveTrade, computePnl, computeShares, computeR } from '../lib/calc';
-import type { TradeRow } from '../lib/types';
+import type { TradeRow, EntrySignal } from '../lib/types';
+import type { EarningsProvider } from './earnings';
 
-export interface Deps { repo: TradeRepo; now: () => string; }
+export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; }
 
-export function registerRoutes(api: Hono, { repo, now }: Deps): void {
+export function registerRoutes(api: Hono, { repo, now, getNextEarnings }: Deps): void {
   const today = () => now().slice(0, 10);
   const dto = (row: TradeRow) => deriveTrade(row, today());
 
@@ -16,6 +17,13 @@ export function registerRoutes(api: Hono, { repo, now }: Deps): void {
     const status = c.req.query('status');
     if (status !== 'pending' && status !== 'filled') return c.json({ error: 'status must be pending or filled' }, 400);
     return c.json(repo.list(status).map(dto));
+  });
+
+  api.get('/earnings', async (c) => {
+    const ticker = (c.req.query('ticker') ?? '').trim().toUpperCase();
+    if (!/^[A-Z]{1,10}$/.test(ticker)) return c.json({ error: 'valid ticker required' }, 400);
+    const earningsDate = await getNextEarnings(ticker, now().slice(0, 10));
+    return c.json({ earningsDate });
   });
 
   api.get('/trades/history', (c) => {
@@ -43,23 +51,45 @@ export function registerRoutes(api: Hono, { repo, now }: Deps): void {
     } while (cursor !== null);
     // ascending for cumulative
     const asc = [...all].sort((a, b) => a.exitDate!.localeCompare(b.exitDate!) || a.id - b.id);
+    // Cost basis is the actual fill price when known, else the planned entry —
+    // identical to deriveTrade, so summary matches the history table.
+    const pnlOf = (r: TradeRow) => {
+      const shares = computeShares(r.upeti, r.entryPrice, r.slPrice);
+      return computePnl(r.fillPrice ?? r.entryPrice, r.exitPrice as number, shares);
+    };
     let cum = 0;
     const equityCurve = asc.map((r) => {
-      const shares = computeShares(r.upeti, r.entryPrice, r.slPrice);
-      cum += computePnl(r.entryPrice, r.exitPrice as number, shares);
+      cum += pnlOf(r);
       return { exitDate: r.exitDate as string, cumulativePnl: cum };
     });
     const totalPnl = equityCurve.length ? equityCurve[equityCurve.length - 1]!.cumulativePnl : 0;
-    const totalR = asc.reduce((s, r) => {
-      const shares = computeShares(r.upeti, r.entryPrice, r.slPrice);
-      return s + computeR(computePnl(r.entryPrice, r.exitPrice as number, shares), r.upeti);
-    }, 0);
-    const wins = asc.filter((r) => {
-      const shares = computeShares(r.upeti, r.entryPrice, r.slPrice);
-      return computePnl(r.entryPrice, r.exitPrice as number, shares) > 0;
-    }).length;
+    const totalR = asc.reduce((s, r) => s + computeR(pnlOf(r), r.upeti), 0);
+    const wins = asc.filter((r) => pnlOf(r) > 0).length;
     const tradeCount = asc.length;
-    return c.json({ totalPnl, totalR, tradeCount, winRate: tradeCount ? wins / tradeCount : 0, equityCurve });
+
+    // Per-signal breakdown: same four metrics, only signals with ≥1 trade,
+    // sorted by P&L descending.
+    const groups = new Map<EntrySignal, TradeRow[]>();
+    for (const r of asc) {
+      const list = groups.get(r.entrySignal) ?? [];
+      list.push(r);
+      groups.set(r.entrySignal, list);
+    }
+    const bySignal = [...groups.entries()]
+      .map(([signal, rows]) => {
+        const pnl = rows.reduce((s, r) => s + pnlOf(r), 0);
+        const sigWins = rows.filter((r) => pnlOf(r) > 0).length;
+        return {
+          signal,
+          pnl,
+          totalR: rows.reduce((s, r) => s + computeR(pnlOf(r), r.upeti), 0),
+          tradeCount: rows.length,
+          winRate: rows.length ? sigWins / rows.length : 0,
+        };
+      })
+      .sort((a, b) => b.pnl - a.pnl);
+
+    return c.json({ totalPnl, totalR, tradeCount, winRate: tradeCount ? wins / tradeCount : 0, equityCurve, bySignal });
   });
 
   api.post('/trades', async (c) => {
@@ -73,8 +103,8 @@ export function registerRoutes(api: Hono, { repo, now }: Deps): void {
   });
 
   api.post('/trades/:id/fill', async (c) => {
-    const { fillDate } = fillSchema.parse(await c.req.json());
-    return c.json(dto(repo.fill(Number(c.req.param('id')), fillDate)));
+    const { fillDate, fillPrice } = fillSchema.parse(await c.req.json());
+    return c.json(dto(repo.fill(Number(c.req.param('id')), fillDate, fillPrice)));
   });
 
   api.post('/trades/:id/cancel', (c) => {
@@ -94,7 +124,12 @@ export function registerRoutes(api: Hono, { repo, now }: Deps): void {
     return c.json(dto(repo.exit(id, input.exitPrice, input.exitDate)));
   });
 
-  api.get('/settings', (c) => c.json({ lastUpeti: repo.getLastUpeti() }));
+  api.get('/settings', (c) => c.json(repo.getSettings()));
+  api.patch('/settings', async (c) => {
+    const input = settingsSchema.parse(await c.req.json());
+    repo.setSettings(input);
+    return c.json(repo.getSettings());
+  });
 }
 
 export function errorHandler(err: Error, c: import('hono').Context) {

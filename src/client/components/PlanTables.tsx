@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { SignalPill } from './SignalPill';
-import { ExitForm } from './ExitForm';
+import { ExitForm, Modal } from './ExitForm';
+import { FillModal } from './FillModal';
 import { EditPositionForm } from './EditPositionForm';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { useToast } from './Toast';
@@ -29,10 +30,23 @@ const earningsMissing = (iso: string | null) => iso == null || iso === '';
 
 function Row({ t, children, flagged, warnEarnings, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; onOpen?: (t: TradeDTO) => void }) {
   const soon = warnEarnings ? earningsSoon(t.earningsDate) : null;
+  // Yellow earnings warning when the row isn't already flagged red (dud takes precedence).
+  const earningsWarn = warnEarnings && !flagged && (soon !== null || earningsMissing(t.earningsDate));
+  const rowBg = flagged
+    ? 'bg-red-400/40 dark:bg-red-900/80'
+    : earningsWarn
+      ? 'bg-amber-100 dark:bg-amber-400/50'
+      : '';
+  const rowTitle = flagged
+    ? 'Past verify window — Keep to stop reminding, or Exit'
+    : earningsWarn
+      ? 'Earnings warning — check the earnings date'
+      : undefined;
   return (
     <tr
       onClick={onOpen ? () => onOpen(t) : undefined}
-      className={`${flagged ? 'bg-red-100 dark:bg-red-900/40' : ''} ${onOpen ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60' : ''}`}
+      className={`${rowBg} ${onOpen ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60' : ''}`}
+      title={rowTitle}
     >
       <td className="px-3 py-2 font-medium">
         {t.ticker}
@@ -41,19 +55,21 @@ function Row({ t, children, flagged, warnEarnings, onOpen }: { t: TradeDTO; chil
       <td className="px-3 py-2">{t.shares}</td>
       <td className="px-3 py-2">
         <div>{money(t.entryPrice)}</div>
-        <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">{t.entryDate}</div>
+        <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+          {t.fillDate ? `filled @ ${money(t.fillPrice)} · ${t.fillDate}` : '—'}
+        </div>
       </td>
       <td className="px-3 py-2">{money(t.slPrice)}</td>
       <td className="px-3 py-2">{money(t.tpPrice)}</td>
       <td className="px-3 py-2">
         {t.earningsDate ?? '—'}
         {warnEarnings && earningsMissing(t.earningsDate) && (
-          <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/30 dark:text-amber-200" title="No earnings date set">
+          <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="No earnings date set">
             ⚠ no date
           </span>
         )}
         {soon !== null && (
-          <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/30 dark:text-amber-200" title="Earnings within 7 days">
+          <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="Earnings within 7 days">
             ⚠ {soon === 0 ? 'today' : `${soon}d`}
           </span>
         )}
@@ -77,30 +93,26 @@ export function PendingOrders() {
   const toast = useToast();
   const pending = useQuery({ queryKey: ['trades', 'pending'], queryFn: () => api.open('pending') });
   const [viewing, setViewing] = useState<TradeDTO | null>(null);
+  const [filling, setFilling] = useState<TradeDTO | null>(null);
+  const [cancelling, setCancelling] = useState<TradeDTO | null>(null);
   const inval = () => qc.invalidateQueries();
 
-  const fill = useMutation({
-    mutationFn: (id: number) => api.fill(id, todayISO()),
-    onSuccess: () => { inval(); toast('Order marked as filled'); },
-    onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
-  });
   const cancel = useMutation({
     mutationFn: (id: number) => api.cancel(id),
-    onSuccess: () => { inval(); toast('Pending order cancelled'); },
+    onSuccess: () => { inval(); toast('Pending order cancelled'); setCancelling(null); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
   });
 
   return (
     <section>
-      <p className="mb-2 text-xs text-slate-400">Click a row for notes &amp; details.</p>
       <table className="w-full text-sm">
         <HeaderRow />
         <tbody>
           {pending.data?.map((t) => (
             <Row key={t.id} t={t} onOpen={setViewing}>
               <span className="flex gap-2">
-                <button onClick={() => fill.mutate(t.id)} className="cursor-pointer rounded bg-emerald-600 px-2 py-0.5 text-xs text-white">Mark filled</button>
-                <button onClick={() => cancel.mutate(t.id)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Cancel</button>
+                <button onClick={() => setFilling(t)} className="cursor-pointer rounded bg-emerald-600 px-2 py-0.5 text-xs text-white">Mark filled</button>
+                <button onClick={() => setCancelling(t)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Cancel</button>
               </span>
             </Row>
           ))}
@@ -108,6 +120,16 @@ export function PendingOrders() {
         </tbody>
       </table>
       {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
+      {filling && <FillModal trade={filling} onClose={() => setFilling(null)} />}
+      {cancelling && (
+        <Modal title={`Cancel ${cancelling.ticker} plan?`} onClose={() => setCancelling(null)}>
+          <p className="text-sm text-slate-600 dark:text-slate-300">This permanently deletes the pending plan. This cannot be undone.</p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setCancelling(null)} className="cursor-pointer px-3 py-1 rounded bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100">Keep plan</button>
+            <button disabled={cancel.isPending} onClick={() => cancel.mutate(cancelling.id)} className="cursor-pointer px-3 py-1 rounded bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed">Cancel plan</button>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }
@@ -135,7 +157,6 @@ export function ActivePositions() {
 
   return (
     <section className="space-y-3">
-      <p className="text-xs text-slate-400">Click a row for notes &amp; details.</p>
       {earningsWarnings.length > 0 && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
           <span className="font-semibold">⚠ Earnings soon:</span>{' '}
@@ -159,10 +180,7 @@ export function ActivePositions() {
             <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings onOpen={setViewing}>
               <span className="flex items-center gap-2">
                 {t.dudFlagged && (
-                  <>
-                    <span className="rounded bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">Confirm</span>
-                    <button onClick={() => keep.mutate(t.id)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Keep</button>
-                  </>
+                  <button onClick={() => keep.mutate(t.id)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Keep</button>
                 )}
                 <button onClick={() => setEditing(t)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Edit</button>
                 <button onClick={() => setExiting(t)} className={`cursor-pointer rounded px-2 py-0.5 text-xs text-white ${t.dudFlagged ? 'bg-red-600' : 'bg-slate-500 dark:bg-slate-500'}`}>Exit</button>
