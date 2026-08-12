@@ -3,10 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
-import { SIGNAL_LABELS } from './SignalPill';
+import { SIGNAL_LABELS, SIGNALS_BY_DIRECTION } from './SignalPill';
 import type { TradeDTO, EntrySignal } from '../../lib/types';
-
-const SIGNALS = Object.keys(SIGNAL_LABELS) as EntrySignal[];
 
 /** Edit an active position's SL, TP and earnings date. */
 export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose: () => void }) {
@@ -60,7 +58,7 @@ export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose:
         </label>
         <label className="block">Entry signal
           <select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className={inputCls('')}>
-            {SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}
+            {SIGNALS_BY_DIRECTION[trade.direction].map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}
           </select>
         </label>
       </div>

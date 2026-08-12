@@ -78,7 +78,14 @@ const daysFromNow = (n: number) => { const d = new Date(today); d.setUTCDate(d.g
 const addDaysISO = (base: string, n: number) => { const d = new Date(base + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
 const thisYear = today.getUTCFullYear();
 
-const SIGNALS: readonly EntrySignal[] = ['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal'];
+// Entry signals available per direction (mirrors SIGNALS_BY_DIRECTION on the client).
+const LONG_SIGNALS: readonly EntrySignal[] = ['no_signal', 'hawk1', 'green_bull', 'btb', 'buy_lautan', 'buy_magenta', 'buy_spec'];
+const SHORT_SIGNALS: readonly EntrySignal[] = ['no_signal', 'bear_detected', 'red_bear', 'bbb', 'sell_lautan', 'sell_magenta', 'spec_sell'];
+// Every (signal, direction) pairing, so seed data covers all variations.
+const ALL_SIGNAL_DIRS: readonly { signal: EntrySignal; direction: TradeDirection }[] = [
+  ...LONG_SIGNALS.map((signal) => ({ signal, direction: 'long' as const })),
+  ...SHORT_SIGNALS.filter((s) => s !== 'no_signal').map((signal) => ({ signal, direction: 'short' as const })),
+];
 const TYPES: readonly EntryType[] = ['buy_limit', 'buy_stop'];
 const SHORT_TYPES: readonly EntryType[] = ['sell_limit', 'sell_stop'];
 const VERIFY: readonly VerifyDays[] = [5, 7, 10, 14];
@@ -112,10 +119,11 @@ const mk = (p: PlanSeed) =>
 const clearEarnings = (id: number) => db.update(trades).set({ earningsDate: null }).where(eq(trades.id, id)).run();
 
 // A randomized plan around a base price. earningsDate supplied by caller.
-// ~1 in 4 plans are shorts, with SL above / TP below entry (mirror of a long).
-function randomPlan(earningsDate: string, withNote: boolean): PlanSeed {
+// Direction defaults to ~1 in 4 short (SL above / TP below entry, mirror of a long);
+// pass `forceDir` to pin it. The entry signal is always picked to match the direction.
+function randomPlan(earningsDate: string, withNote: boolean, forceDir?: TradeDirection): PlanSeed {
   const entry = round2(between(15, 600));
-  const short = rnd() < 0.25;
+  const short = forceDir ? forceDir === 'short' : rnd() < 0.25;
   return {
     ticker: pick(TICKERS),
     upeti: pick([100, 100, 100, 250, 500, 750, 1000]),
@@ -123,7 +131,7 @@ function randomPlan(earningsDate: string, withNote: boolean): PlanSeed {
     slPrice: short ? round2(entry * between(1.03, 1.1)) : round2(entry * between(0.9, 0.97)),
     tpPrice: rnd() < 0.8 ? round2(entry * (short ? between(0.75, 0.95) : between(1.05, 1.25))) : null,
     entryType: short ? pick(SHORT_TYPES) : pick(TYPES),
-    entrySignal: pick(SIGNALS),
+    entrySignal: pick(short ? SHORT_SIGNALS : LONG_SIGNALS),
     direction: short ? 'short' : 'long',
     earningsDate,
     notes: withNote ? pick(NOTES_POOL) : null,
@@ -131,14 +139,14 @@ function randomPlan(earningsDate: string, withNote: boolean): PlanSeed {
   };
 }
 
-// ── Pending orders (≤10) — guarantee every entry signal appears ──────────────
-// First 6 cover each signal (btb, buy_lautan, buy_magenta, hawk1, buy_spec, no_signal),
-// then 4 more are random, for 10 total.
-SIGNALS.forEach((signal, i) => {
-  mk({ ...randomPlan(daysFromNow(60 + i * 3), rnd() < 0.5), entrySignal: signal });
+// ── Pending orders (~17) — guarantee every (signal, direction) variation appears ─
+// One plan per pairing (long signals + short signals), each with a matching-direction
+// plan so SL/TP sides and entry types stay valid, then a few extra random plans.
+ALL_SIGNAL_DIRS.forEach(({ signal, direction }, i) => {
+  mk({ ...randomPlan(daysFromNow(60 + i * 3), rnd() < 0.5, direction), entrySignal: signal });
 });
 for (let i = 0; i < 4; i++) {
-  mk(randomPlan(daysFromNow(75 + i * 3), rnd() < 0.5));
+  mk(randomPlan(daysFromNow(120 + i * 3), rnd() < 0.5));
 }
 
 // ── Active positions (≤25) ───────────────────────────────────────────────────
@@ -215,7 +223,7 @@ const years = db.all<{ y: string }>(sql`select distinct substr(exit_date,1,4) as
 
 sqlite.close();
 console.log('Seed complete for', dbPath);
-console.log(`  pending: ${counts?.pending ?? 0} (max 10)   active: ${counts?.filled ?? 0} (max 25)   history: ${counts?.exited ?? 0}`);
+console.log(`  pending: ${counts?.pending ?? 0}   active: ${counts?.filled ?? 0} (max 25)   history: ${counts?.exited ?? 0}`);
 console.log(`  history years: ${years.map((r) => r.y).join(', ')}`);
 console.log('  Active Positions demonstrate: TSLA=Verify(dud), NVDA=fresh, MSFT=kept, GOOGL=earnings 3d, AMZN=earnings today, COIN=no earnings date.');
 console.log('  Many trades carry notes ("note" tag in the tables; click a row to read).');

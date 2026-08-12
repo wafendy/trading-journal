@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { computeShares } from '../../lib/calc';
-import { SIGNAL_LABELS } from './SignalPill';
+import { SIGNAL_LABELS, SIGNALS_BY_DIRECTION } from './SignalPill';
 import type { EntrySignal, EntryType, TradeDirection } from '../../lib/types';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
@@ -23,8 +23,6 @@ function rollForward90(iso: string): string {
   }
   return d.toISOString().slice(0, 10);
 }
-const SIGNALS = Object.keys(SIGNAL_LABELS) as EntrySignal[];
-
 // Order types available per direction — buys for long, sells for short.
 const ENTRY_TYPES: Record<TradeDirection, { value: EntryType; label: string }[]> = {
   long: [{ value: 'buy_limit', label: 'Buy Limit' }, { value: 'buy_stop', label: 'Buy Stop' }],
@@ -142,8 +140,9 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
           const d = e.target.value as TradeDirection;
           setDirection(d);
           setEntryType(ENTRY_TYPES[d][0]!.value); // keep entry type valid for the new direction
+          setEntrySignal(SIGNALS_BY_DIRECTION[d][0]!); // and reset signal to a valid one
         }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1"><option value="long">Long (Buy)</option><option value="short">Short (Sell)</option></select></label>
-        <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
+        <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS_BY_DIRECTION[direction].map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
         <label>Entry type<select value={entryType} onChange={(e) => setEntryType(e.target.value as EntryType)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{ENTRY_TYPES[direction].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
         {/* Row 3 */}
         <label>Entry price<input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>

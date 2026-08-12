@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 const entryType = z.enum(['buy_limit', 'buy_stop', 'sell_limit', 'sell_stop']);
-const entrySignal = z.enum(['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal']);
+const entrySignal = z.enum([
+  'btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal',
+  'bbb', 'sell_lautan', 'sell_magenta', 'spec_sell', 'red_bear', 'bear_detected', 'green_bull',
+]);
 const direction = z.enum(['long', 'short']);
 const verifyDays = z.union([z.literal(5), z.literal(7), z.literal(10), z.literal(14)]);
 
