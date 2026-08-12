@@ -9,6 +9,7 @@ export const trades = sqliteTable('trades', {
   tpPrice: real('tp_price'),
   entryType: text('entry_type').notNull(),
   entrySignal: text('entry_signal').notNull(),
+  direction: text('direction').notNull().default('long'),
   earningsDate: text('earnings_date'),
   notes: text('notes'),
   verifyDays: integer('verify_days').notNull(),

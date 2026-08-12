@@ -35,7 +35,7 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       const row = db.insert(trades).values({
         ticker: input.ticker, upeti: input.upeti, entryPrice: input.entryPrice, slPrice: input.slPrice,
         tpPrice: input.tpPrice ?? null, entryType: input.entryType, entrySignal: input.entrySignal,
-        earningsDate: input.earningsDate, notes: input.notes ?? null, verifyDays: input.verifyDays, status: 'pending',
+        direction: input.direction, earningsDate: input.earningsDate, notes: input.notes ?? null, verifyDays: input.verifyDays, status: 'pending',
         fillDate: null, fillPrice: null, dudDecision: null, exitPrice: null, exitDate: null, createdAt: ts, updatedAt: ts,
       }).returning().get() as TradeRow;
       return row;

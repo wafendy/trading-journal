@@ -9,11 +9,36 @@ describe('computeShares', () => {
     // 1000 / (10-7=3) = 333.33 -> 333
     expect(computeShares(1000, 10, 7)).toBe(333);
   });
+  it('uses (sl - entry) as risk for a short', () => {
+    // short: SL above entry, 1000 / (55-50=5) = 200
+    expect(computeShares(1000, 50, 55, 'short')).toBe(200);
+    // a below-entry SL is invalid risk for a short -> 0
+    expect(computeShares(1000, 50, 45, 'short')).toBe(0);
+  });
 });
 
 describe('computePnl', () => {
   it('is positive on a win', () => { expect(computePnl(50, 55, 200)).toBe(1000); });
   it('is negative on a loss', () => { expect(computePnl(50, 45, 200)).toBe(-1000); });
+  it('inverts for a short (profit when price falls)', () => {
+    expect(computePnl(50, 45, 200, 'short')).toBe(1000);
+    expect(computePnl(50, 55, 200, 'short')).toBe(-1000);
+  });
+});
+
+describe('deriveTrade — short', () => {
+  const short: TradeRow = {
+    id: 2, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 55, tpPrice: 40,
+    entryType: 'sell_limit', entrySignal: 'btb', direction: 'short', earningsDate: '2026-08-25', notes: null, verifyDays: 5,
+    status: 'exited', fillDate: '2026-08-03', fillPrice: null, fillShares: null, dudDecision: null, exitPrice: 45, exitDate: '2026-08-20',
+    createdAt: 'x', updatedAt: 'x',
+  };
+  it('sizes and profits on a downward move', () => {
+    const d = deriveTrade(short, '2026-08-21');
+    expect(d.shares).toBe(200);            // 1000 / (55-50)
+    expect(d.realizedPnl).toBe(1000);      // (50-45) * 200
+    expect(d.rMultiple).toBeCloseTo(1);
+  });
 });
 
 describe('computeR', () => {
@@ -53,7 +78,7 @@ describe('isDudFlagged', () => {
 describe('deriveTrade', () => {
   const row: TradeRow = {
     id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: 60,
-    entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', notes: null, verifyDays: 5,
+    entryType: 'buy_limit', entrySignal: 'btb', direction: 'long', earningsDate: '2026-08-25', notes: null, verifyDays: 5,
     status: 'exited', fillDate: '2026-08-03', fillPrice: null, fillShares: null, dudDecision: null, exitPrice: 55, exitDate: '2026-08-20',
     createdAt: '2026-08-03T00:00:00Z', updatedAt: '2026-08-20T00:00:00Z',
   };
@@ -74,7 +99,7 @@ describe('deriveTrade', () => {
 describe('deriveTrade cost basis', () => {
   const base: TradeRow = {
     id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: null,
-    entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', notes: null,
+    entryType: 'buy_limit', entrySignal: 'btb', direction: 'long', earningsDate: '2026-08-25', notes: null,
     verifyDays: 5, status: 'exited', fillDate: '2026-08-04', fillPrice: 52, fillShares: null, dudDecision: null,
     exitPrice: 60, exitDate: '2026-08-20', createdAt: 'x', updatedAt: 'x',
   };

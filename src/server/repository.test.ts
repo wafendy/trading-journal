@@ -10,7 +10,7 @@ function setup() {
   return { repo, setClock: (c: string) => (clock = c) };
 }
 
-const base = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit' as const, entrySignal: 'btb' as const, earningsDate: '2026-08-25', verifyDays: 5 as const };
+const base = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit' as const, entrySignal: 'btb' as const, direction: 'long' as const, earningsDate: '2026-08-25', verifyDays: 5 as const };
 
 describe('create + lifecycle', () => {
   let ctx: ReturnType<typeof setup>;

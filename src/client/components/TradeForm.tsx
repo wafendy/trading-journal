@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { computeShares } from '../../lib/calc';
 import { SIGNAL_LABELS } from './SignalPill';
-import type { EntrySignal, EntryType } from '../../lib/types';
+import type { EntrySignal, EntryType, TradeDirection } from '../../lib/types';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
 
@@ -25,6 +25,12 @@ function rollForward90(iso: string): string {
 }
 const SIGNALS = Object.keys(SIGNAL_LABELS) as EntrySignal[];
 
+// Order types available per direction — buys for long, sells for short.
+const ENTRY_TYPES: Record<TradeDirection, { value: EntryType; label: string }[]> = {
+  long: [{ value: 'buy_limit', label: 'Buy Limit' }, { value: 'buy_stop', label: 'Buy Stop' }],
+  short: [{ value: 'sell_limit', label: 'Sell Limit' }, { value: 'sell_stop', label: 'Sell Stop' }],
+};
+
 export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated?: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -38,6 +44,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   // apply while the user hasn't set these fields themselves.
   const [slEdited, setSlEdited] = useState(false);
   const [tpEdited, setTpEdited] = useState(false);
+  const [direction, setDirection] = useState<TradeDirection>('long');
   const [entryType, setEntryType] = useState<EntryType>('buy_limit');
   const [entrySignal, setEntrySignal] = useState<EntrySignal>('buy_lautan');
   const [earningsDate, setEarningsDate] = useState('');
@@ -61,25 +68,33 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   // Prefill UPETI from the global setting (snapshotted onto the trade at creation).
   useEffect(() => { if (settings.data) setUpeti(String(settings.data.upeti)); }, [settings.data]);
 
-  // Auto-fill SL (5% below) and TP (10% above) from entry price, unless the
-  // user has manually edited that field.
+  // Auto-fill SL and TP from entry price, unless the user has edited that field.
+  // Long: SL 5% below, TP 10% above. Short: mirrored — SL 5% above, TP 10% below.
   useEffect(() => {
     const ep = Number(entryPrice);
     if (!(ep > 0)) return;
     const round = (n: number) => Math.round(n * 100) / 100;
-    if (!slEdited) setSlPrice(String(round(ep * 0.95)));
-    if (!tpEdited) setTpPrice(String(round(ep * 1.1)));
-  }, [entryPrice, slEdited, tpEdited]);
+    const slFactor = direction === 'short' ? 1.05 : 0.95;
+    const tpFactor = direction === 'short' ? 0.9 : 1.1;
+    if (!slEdited) setSlPrice(String(round(ep * slFactor)));
+    if (!tpEdited) setTpPrice(String(round(ep * tpFactor)));
+  }, [entryPrice, slEdited, tpEdited, direction]);
 
   const e = Number(entryPrice), s = Number(slPrice), tp = Number(tpPrice), u = Number(upeti);
-  const shares = u > 0 && e > s && s > 0 ? computeShares(u, e, s) : 0;
+  // Per-share risk is on opposite sides of entry by direction.
+  const risk = direction === 'short' ? s - e : e - s;
+  const shares = u > 0 && risk > 0 && s > 0 ? computeShares(u, e, s, direction) : 0;
 
-  // Inline field validation
-  const slError = slPrice !== '' && e > 0 && s >= e ? 'SL must be below entry price' : '';
-  const tpError = tpPrice !== '' && e > 0 && tp < e ? 'TP must be at or above entry price' : '';
+  // Inline field validation — SL/TP flip sides for shorts.
+  const slError = slPrice !== '' && e > 0 && (direction === 'short' ? s <= e : s >= e)
+    ? (direction === 'short' ? 'SL must be above entry price' : 'SL must be below entry price') : '';
+  const tpError = tpPrice !== '' && e > 0 && (direction === 'short' ? tp > e : tp < e)
+    ? (direction === 'short' ? 'TP must be at or below entry price' : 'TP must be at or above entry price') : '';
 
-  // Risk/Reward ratio = reward per unit of risk = (TP − entry) / (entry − SL)
-  const rr = e > s && s > 0 && tpPrice !== '' && tp >= e ? (tp - e) / (e - s) : null;
+  // Risk/Reward ratio = reward per unit of risk. Reward and risk both measured
+  // toward the profit/loss side, so the ratio stays positive for either direction.
+  const reward = direction === 'short' ? e - tp : tp - e;
+  const rr = risk > 0 && s > 0 && tpPrice !== '' && reward >= 0 ? reward / risk : null;
 
   const today = todayISO();
   const earningsDateError = earningsDate !== '' && earningsDate < today ? 'Earnings date cannot be in the past' : '';
@@ -94,6 +109,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
     setTpPrice('');
     setSlEdited(false);
     setTpEdited(false);
+    setDirection('long');
     setEntryType('buy_limit');
     setEntrySignal('buy_lautan');
     setEarningsDate('');
@@ -106,14 +122,14 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   const m = useMutation({
     mutationFn: () => api.create({
       ticker, upeti: Number(upeti), entryPrice: Number(entryPrice), slPrice: Number(slPrice),
-      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, earningsDate, notes: notes.trim() || null, verifyDays: settings.data?.verifyDays ?? 5,
+      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, direction, earningsDate, notes: notes.trim() || null, verifyDays: settings.data?.verifyDays ?? 5,
     }),
     onSuccess: () => { qc.invalidateQueries(); toast('Trade plan created'); reset(); onClose(); onCreated?.(); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
   });
 
   if (!open) return null;
-  const valid = ticker && u > 0 && e > s && s > 0 && earningsDate && !slError && !tpError && !earningsDateError;
+  const valid = ticker && u > 0 && risk > 0 && s > 0 && earningsDate && !slError && !tpError && !earningsDateError;
   return (
     <Modal title="New Trade Plan" onClose={onClose}>
       <div className="grid grid-cols-3 gap-3 text-sm">
@@ -122,9 +138,13 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
         <label>Earnings date<input type="date" min={today} value={earningsDate} onChange={(ev) => { setEarningsEdited(true); setEarningsStatus('idle'); setEarningsDate(rollForward90(ev.target.value)); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${earningsDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{earningsDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{earningsDateError}</span>}{!earningsDateError && earningsStatus === 'loading' && <span className="mt-1 block text-xs text-slate-400">Looking up earnings…</span>}{!earningsDateError && earningsStatus === 'fetched' && <span className="mt-1 block text-xs text-slate-400">Fetched from Finnhub</span>}{!earningsDateError && earningsStatus === 'notfound' && <span className="mt-1 block text-xs text-slate-400">No earnings date found — enter manually</span>}</label>
         <div />
         {/* Row 2 */}
+        <label>Direction<select value={direction} onChange={(e) => {
+          const d = e.target.value as TradeDirection;
+          setDirection(d);
+          setEntryType(ENTRY_TYPES[d][0]!.value); // keep entry type valid for the new direction
+        }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1"><option value="long">Long (Buy)</option><option value="short">Short (Sell)</option></select></label>
         <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
-        <label>Entry type<select value={entryType} onChange={(e) => setEntryType(e.target.value as EntryType)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1"><option value="buy_limit">Buy Limit</option><option value="buy_stop">Buy Stop</option></select></label>
-        <div />
+        <label>Entry type<select value={entryType} onChange={(e) => setEntryType(e.target.value as EntryType)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{ENTRY_TYPES[direction].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
         {/* Row 3 */}
         <label>Entry price<input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         <label>SL price<input type="number" step="any" value={slPrice} onChange={(ev) => { setSlEdited(true); setSlPrice(ev.target.value); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${slError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{slError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{slError}</span>}</label>

@@ -1,13 +1,17 @@
-import type { TradeRow, TradeDTO, TradeStatus, DudDecision } from './types';
+import type { TradeRow, TradeDTO, TradeStatus, DudDecision, TradeDirection } from './types';
 
-export function computeShares(upeti: number, entryPrice: number, slPrice: number): number {
-  const risk = entryPrice - slPrice;
+// Per-share risk is the distance from entry to stop. For a long the stop sits
+// below entry (entry − sl); for a short it sits above (sl − entry). Always ≥ 0.
+export function computeShares(upeti: number, entryPrice: number, slPrice: number, direction: TradeDirection = 'long'): number {
+  const risk = direction === 'short' ? slPrice - entryPrice : entryPrice - slPrice;
   if (risk <= 0) return 0;
   return Math.floor(upeti / risk);
 }
 
-export function computePnl(entryPrice: number, exitPrice: number, shares: number): number {
-  return (exitPrice - entryPrice) * shares;
+// A long profits as price rises (exit − entry); a short profits as it falls (entry − exit).
+export function computePnl(entryPrice: number, exitPrice: number, shares: number, direction: TradeDirection = 'long'): number {
+  const move = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice;
+  return move * shares;
 }
 
 export function computeR(pnl: number, upeti: number): number {
@@ -40,10 +44,10 @@ export function isDudFlagged(
 
 export function deriveTrade(row: TradeRow, todayISO: string): TradeDTO {
   // A manually-entered fill quantity overrides the planned size once captured.
-  const shares = row.fillShares ?? computeShares(row.upeti, row.entryPrice, row.slPrice);
+  const shares = row.fillShares ?? computeShares(row.upeti, row.entryPrice, row.slPrice, row.direction);
   const exited = row.status === 'exited' && row.exitPrice !== null;
   const costBasis = row.fillPrice ?? row.entryPrice;
-  const realizedPnl = exited ? computePnl(costBasis, row.exitPrice as number, shares) : null;
+  const realizedPnl = exited ? computePnl(costBasis, row.exitPrice as number, shares, row.direction) : null;
   const rMultiple = realizedPnl !== null ? computeR(realizedPnl, row.upeti) : null;
   return { ...row, shares, realizedPnl, rMultiple, dudFlagged: isDudFlagged(row, todayISO) };
 }

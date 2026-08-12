@@ -1,9 +1,14 @@
 import { Modal } from './ExitForm';
 import { SignalPill } from './SignalPill';
-import type { TradeDTO } from '../../lib/types';
+import type { TradeDTO, EntryType, TradeDirection } from '../../lib/types';
 import type { ReactNode } from 'react';
 
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
+
+export const ENTRY_TYPE_LABELS: Record<EntryType, string> = {
+  buy_limit: 'Buy Limit', buy_stop: 'Buy Stop', sell_limit: 'Sell Limit', sell_stop: 'Sell Stop',
+};
+export const DIRECTION_LABELS: Record<TradeDirection, string> = { long: 'Long', short: 'Short' };
 
 // Optional ticker link templates, e.g. "https://.../?symbol=${TICKER}". Each configured
 // template becomes an outbound link in the details modal (in list order); none → no links.
@@ -87,7 +92,9 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
         <Field label="Status">{STATUS_LABEL[trade.status]}</Field>
         <div />
         <Field label="Entry signal"><SignalPill signal={trade.entrySignal} /></Field>
-        <Field label="Entry type">{trade.entryType === 'buy_limit' ? 'Buy Limit' : 'Buy Stop'}</Field>
+        <Field label="Direction">{DIRECTION_LABELS[trade.direction]}</Field>
+        <Field label="Entry type">{ENTRY_TYPE_LABELS[trade.entryType]}</Field>
+        <div />
         <Field label="Fill price">{money(trade.fillPrice)}</Field>
         <Field label="Fill date">{trade.fillDate ?? '—'}</Field>
         <Field label="SL / TP">{`${money(trade.slPrice)} / ${money(trade.tpPrice)}`}</Field>

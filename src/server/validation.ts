@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
-const entryType = z.enum(['buy_limit', 'buy_stop']);
+const entryType = z.enum(['buy_limit', 'buy_stop', 'sell_limit', 'sell_stop']);
 const entrySignal = z.enum(['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal']);
+const direction = z.enum(['long', 'short']);
 const verifyDays = z.union([z.literal(5), z.literal(7), z.literal(10), z.literal(14)]);
 
 export const createTradeSchema = z.object({
@@ -13,12 +14,21 @@ export const createTradeSchema = z.object({
   tpPrice: z.number().positive().nullable().optional(),
   entryType,
   entrySignal,
+  direction: direction.default('long'),
   earningsDate: isoDate,
   notes: z.string().max(2000).nullable().optional(),
   verifyDays,
 })
-  .refine((d) => d.slPrice < d.entryPrice, { message: 'slPrice must be below entryPrice', path: ['slPrice'] })
-  .refine((d) => d.tpPrice == null || d.tpPrice >= d.entryPrice, { message: 'tpPrice must be at or above entryPrice', path: ['tpPrice'] });
+  // Stop/target sit on opposite sides of entry depending on direction:
+  // long → SL below, TP at/above entry; short → SL above, TP at/below entry.
+  .refine((d) => (d.direction === 'short' ? d.slPrice > d.entryPrice : d.slPrice < d.entryPrice), {
+    message: 'slPrice must be on the loss side of entry (below for long, above for short)',
+    path: ['slPrice'],
+  })
+  .refine((d) => d.tpPrice == null || (d.direction === 'short' ? d.tpPrice <= d.entryPrice : d.tpPrice >= d.entryPrice), {
+    message: 'tpPrice must be on the profit side of entry (at/above for long, at/below for short)',
+    path: ['tpPrice'],
+  });
 
 export const patchTradeSchema = z.object({
   ticker: z.string().min(1).max(10).transform((s) => s.toUpperCase()).optional(),
@@ -28,6 +38,7 @@ export const patchTradeSchema = z.object({
   tpPrice: z.number().positive().nullable().optional(),
   entryType: entryType.optional(),
   entrySignal: entrySignal.optional(),
+  direction: direction.optional(),
   earningsDate: isoDate.optional(),
   notes: z.string().max(2000).nullable().optional(),
   verifyDays: verifyDays.optional(),

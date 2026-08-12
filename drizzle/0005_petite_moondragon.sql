@@ -1,0 +1,1 @@
+ALTER TABLE `trades` ADD `direction` text DEFAULT 'long' NOT NULL;

@@ -20,7 +20,7 @@ import { sql, eq } from 'drizzle-orm';
 import { createDb, migrateDb } from './db/index';
 import { createRepo } from './repository';
 import { trades } from './db/schema';
-import type { EntrySignal, EntryType, VerifyDays } from '../lib/types';
+import type { EntrySignal, EntryType, TradeDirection, VerifyDays } from '../lib/types';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -80,6 +80,7 @@ const thisYear = today.getUTCFullYear();
 
 const SIGNALS: readonly EntrySignal[] = ['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal'];
 const TYPES: readonly EntryType[] = ['buy_limit', 'buy_stop'];
+const SHORT_TYPES: readonly EntryType[] = ['sell_limit', 'sell_stop'];
 const VERIFY: readonly VerifyDays[] = [5, 7, 10, 14];
 const TICKERS = [
   'AAPL', 'MSFT', 'NVDA', 'AMD', 'TSLA', 'META', 'GOOGL', 'AMZN', 'NFLX', 'AVGO',
@@ -99,28 +100,31 @@ const NOTES_POOL = [
 
 interface PlanSeed {
   ticker: string; upeti: number; entryPrice: number; slPrice: number; tpPrice?: number | null;
-  entryType: EntryType; entrySignal: EntrySignal; earningsDate: string;
+  entryType: EntryType; entrySignal: EntrySignal; direction?: TradeDirection; earningsDate: string;
   notes?: string | null; verifyDays: VerifyDays;
 }
 const mk = (p: PlanSeed) =>
   repo.create({
     ticker: p.ticker, upeti: p.upeti, entryPrice: p.entryPrice, slPrice: p.slPrice, tpPrice: p.tpPrice ?? null,
-    entryType: p.entryType, entrySignal: p.entrySignal, earningsDate: p.earningsDate,
+    entryType: p.entryType, entrySignal: p.entrySignal, direction: p.direction ?? 'long', earningsDate: p.earningsDate,
     notes: p.notes ?? null, verifyDays: p.verifyDays,
   });
 const clearEarnings = (id: number) => db.update(trades).set({ earningsDate: null }).where(eq(trades.id, id)).run();
 
 // A randomized plan around a base price. earningsDate supplied by caller.
+// ~1 in 4 plans are shorts, with SL above / TP below entry (mirror of a long).
 function randomPlan(earningsDate: string, withNote: boolean): PlanSeed {
   const entry = round2(between(15, 600));
+  const short = rnd() < 0.25;
   return {
     ticker: pick(TICKERS),
     upeti: pick([100, 100, 100, 250, 500, 750, 1000]),
     entryPrice: entry,
-    slPrice: round2(entry * between(0.9, 0.97)),
-    tpPrice: rnd() < 0.8 ? round2(entry * between(1.05, 1.25)) : null,
-    entryType: pick(TYPES),
+    slPrice: short ? round2(entry * between(1.03, 1.1)) : round2(entry * between(0.9, 0.97)),
+    tpPrice: rnd() < 0.8 ? round2(entry * (short ? between(0.75, 0.95) : between(1.05, 1.25))) : null,
+    entryType: short ? pick(SHORT_TYPES) : pick(TYPES),
     entrySignal: pick(SIGNALS),
+    direction: short ? 'short' : 'long',
     earningsDate,
     notes: withNote ? pick(NOTES_POOL) : null,
     verifyDays: pick(VERIFY),
@@ -187,9 +191,11 @@ for (const [yStr, target] of Object.entries(perYear)) {
     const fillDate = addDaysISO(entryDate, 1);
     const plan = randomPlan(addDaysISO(entryDate, 30), rnd() < 0.5);
     const win = rnd() < 0.58; // ~58% win rate
-    const exitPrice = win
-      ? round2(plan.entryPrice * between(1.03, 1.3))
-      : round2(plan.entryPrice * between(0.82, 0.99));
+    // A short wins when price falls, so a winning short exits BELOW entry.
+    const up = round2(plan.entryPrice * between(1.03, 1.3));
+    const down = round2(plan.entryPrice * between(0.82, 0.99));
+    const short = plan.direction === 'short';
+    const exitPrice = win ? (short ? down : up) : (short ? up : down);
     const t = mk(plan);
     repo.fill(t.id, fillDate, plan.entryPrice, null);
     repo.exit(t.id, exitPrice, exitDate);

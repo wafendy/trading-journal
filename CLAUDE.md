@@ -54,9 +54,11 @@ specs) unless the user explicitly asks. Leave `bun.lock` alone (do not stage it)
 ## Key domain rules
 
 - **UPETI** = risk amount in dollars; a global setting (in `app_settings`) snapshotted per trade at creation. Changing it never rewrites existing trades.
-- **shares** = `floor(upeti / (entry − sl))`, sized at creation from the planned entry price.
-- **realizedPnl** = `(exit − fillPrice) × shares` (gross, no fees); `fillPrice` is captured at Mark-filled and falls back to `entryPrice` if absent.
+- **direction** = `long` | `short` (column on `trades`, default `long`; existing rows backfilled to `long`). Longs profit as price rises, shorts as it falls. All money math in `calc.ts` branches on it (`computeShares`/`computePnl` take a `direction` param defaulting to `long`). Long uses `buy_limit`/`buy_stop`; short uses `sell_limit`/`sell_stop`.
+- **shares** = `floor(upeti / risk)` where risk = `entry − sl` for a long, `sl − entry` for a short (SL is above entry on a short). Sized at creation from the planned entry price; a manual fill quantity (`fill_shares`) overrides it.
+- **realizedPnl** = `move × shares` (gross, no fees) where move = `exit − fillPrice` for a long, `fillPrice − exit` for a short. `fillPrice` is captured at Mark-filled and falls back to `entryPrice` if absent.
 - **R** = `pnl / upeti`.
+- **SL/TP sides**: long → SL below entry, TP at/above; short → SL above entry, TP at/below. Enforced in `createTradeSchema` refinements (branch on direction) and mirrored in the forms' auto-fill + inline validation.
 - **There is a single trade date**: `fill_date`, set at Mark-filled (which also captures `fill_price`). There is no separate entry date; a pending plan has no date.
 - **verifyDays / Confirm-in**: a global setting snapshotted per trade.
 - **Dud flag**: a filled position with no decision flags as a dud once

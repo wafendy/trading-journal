@@ -1,4 +1,5 @@
-export type EntryType = 'buy_limit' | 'buy_stop';
+export type EntryType = 'buy_limit' | 'buy_stop' | 'sell_limit' | 'sell_stop';
+export type TradeDirection = 'long' | 'short';
 export type EntrySignal = 'btb' | 'buy_lautan' | 'buy_magenta' | 'hawk1' | 'buy_spec' | 'no_signal';
 export type TradeStatus = 'pending' | 'filled' | 'exited';
 export type VerifyDays = 5 | 7 | 10 | 14;
@@ -13,6 +14,7 @@ export interface TradeRow {
   tpPrice: number | null;
   entryType: EntryType;
   entrySignal: EntrySignal;
+  direction: TradeDirection;
   earningsDate: string | null;
   notes: string | null;
   verifyDays: number;

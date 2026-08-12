@@ -18,9 +18,15 @@ export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose:
   const [entrySignal, setEntrySignal] = useState<EntrySignal>(trade.entrySignal);
 
   const entry = trade.entryPrice;
+  const short = trade.direction === 'short';
   const s = Number(slPrice), tp = Number(tpPrice);
-  const slError = slPrice === '' || !(s > 0) ? 'SL is required' : s >= entry ? 'SL must be below entry price' : '';
-  const tpError = tpPrice !== '' && tp < entry ? 'TP must be at or above entry price' : '';
+  // SL/TP sit on opposite sides of entry for shorts (SL above, TP below).
+  const slError = slPrice === '' || !(s > 0)
+    ? 'SL is required'
+    : (short ? s <= entry : s >= entry)
+      ? (short ? 'SL must be above entry price' : 'SL must be below entry price') : '';
+  const tpError = tpPrice !== '' && (short ? tp > entry : tp < entry)
+    ? (short ? 'TP must be at or below entry price' : 'TP must be at or above entry price') : '';
 
   const m = useMutation({
     mutationFn: () =>

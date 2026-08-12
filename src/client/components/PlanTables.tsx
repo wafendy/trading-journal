@@ -73,6 +73,9 @@ function Row({ t, children, flagged, warnEarnings, showHeld, onOpen }: { t: Trad
     >
       <td className="px-3 py-2 font-medium">
         {t.ticker}
+        {t.direction === 'short' && (
+          <span className="ml-1.5 rounded bg-rose-200 px-1 py-0.5 text-[10px] font-semibold text-rose-900 dark:bg-rose-500/30 dark:text-rose-200" title="Short position">SHORT</span>
+        )}
         {t.notes && <NoteIcon />}
       </td>
       <td className="px-3 py-2">{t.shares}</td>

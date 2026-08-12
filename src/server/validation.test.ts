@@ -24,6 +24,19 @@ describe('createTradeSchema', () => {
   it('rejects tp below entry price', () => {
     expect(() => createTradeSchema.parse({ ...valid, tpPrice: 49 })).toThrow();
   });
+  it('defaults direction to long', () => {
+    expect(createTradeSchema.parse(valid).direction).toBe('long');
+  });
+  it('accepts a short with SL above and TP below entry', () => {
+    const short = { ...valid, direction: 'short', slPrice: 55, tpPrice: 40, entryType: 'sell_limit' };
+    expect(createTradeSchema.parse(short).direction).toBe('short');
+  });
+  it('rejects a short whose SL is below entry', () => {
+    expect(() => createTradeSchema.parse({ ...valid, direction: 'short', slPrice: 45 })).toThrow();
+  });
+  it('rejects a short whose TP is above entry', () => {
+    expect(() => createTradeSchema.parse({ ...valid, direction: 'short', slPrice: 55, tpPrice: 60, entryType: 'sell_limit' })).toThrow();
+  });
   it('accepts tp at or above entry price, and null tp', () => {
     expect(createTradeSchema.parse({ ...valid, tpPrice: 60 }).tpPrice).toBe(60);
     expect(createTradeSchema.parse({ ...valid, tpPrice: 50 }).tpPrice).toBe(50); // == entry allowed
