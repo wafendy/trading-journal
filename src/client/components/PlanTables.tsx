@@ -148,11 +148,11 @@ export function PendingOrders() {
       {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
       {filling && <FillModal trade={filling} onClose={() => setFilling(null)} />}
       {cancelling && (
-        <Modal title={`Cancel ${cancelling.ticker} plan?`} onClose={() => setCancelling(null)}>
-          <p className="text-sm text-slate-600 dark:text-slate-300">This permanently deletes the pending plan. This cannot be undone.</p>
+        <Modal title={`Cancel ${cancelling.ticker} trading plan?`} onClose={() => setCancelling(null)}>
+          <p className="text-sm text-slate-600 dark:text-slate-300">This permanently deletes the trading plan. This cannot be undone.</p>
           <div className="mt-4 flex justify-end gap-2">
-            <button onClick={() => setCancelling(null)} className="cursor-pointer px-3 py-1 rounded bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100">Keep plan</button>
-            <button disabled={cancel.isPending} onClick={() => cancel.mutate(cancelling.id)} className="cursor-pointer px-3 py-1 rounded bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed">Cancel plan</button>
+            <button onClick={() => setCancelling(null)} className="cursor-pointer px-3 py-1 rounded bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100">Keep</button>
+            <button disabled={cancel.isPending} onClick={() => cancel.mutate(cancelling.id)} className="cursor-pointer px-3 py-1 rounded bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
           </div>
         </Modal>
       )}
