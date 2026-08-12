@@ -22,6 +22,7 @@ export function EditHistoryForm({ trade, onClose }: { trade: TradeDTO; onClose: 
   const [upeti, setUpeti] = useState(String(trade.upeti));
   const [fillPrice, setFillPrice] = useState(trade.fillPrice != null ? String(trade.fillPrice) : '');
   const [fillShares, setFillShares] = useState(trade.fillShares != null ? String(trade.fillShares) : '');
+  const [fillDate, setFillDate] = useState(trade.fillDate ?? '');
   const [exitPrice, setExitPrice] = useState(trade.exitPrice != null ? String(trade.exitPrice) : '');
   const [exitDate, setExitDate] = useState(trade.exitDate ?? '');
   const [entrySignal, setEntrySignal] = useState<EntrySignal>(trade.entrySignal);
@@ -33,10 +34,11 @@ export function EditHistoryForm({ trade, onClose }: { trade: TradeDTO; onClose: 
   const upetiErr = posErr(upeti, 'UPETI');
   const fillPriceErr = fillPrice !== '' && !(num(fillPrice) > 0) ? 'Fill price must be positive' : '';
   const fillSharesErr = fillShares !== '' && !(Number.isInteger(num(fillShares)) && num(fillShares) > 0) ? 'Quantity must be a positive whole number' : '';
+  const fillDateErr = ISO.test(fillDate) ? '' : 'Fill date is required (YYYY-MM-DD)';
   const exitPriceErr = posErr(exitPrice, 'Exit price');
   const exitDateErr = ISO.test(exitDate) ? '' : 'Exit date is required (YYYY-MM-DD)';
 
-  const valid = !entryErr && !slErr && !upetiErr && !fillPriceErr && !fillSharesErr && !exitPriceErr && !exitDateErr;
+  const valid = !entryErr && !slErr && !upetiErr && !fillPriceErr && !fillSharesErr && !fillDateErr && !exitPriceErr && !exitDateErr;
 
   const m = useMutation({
     mutationFn: () =>
@@ -46,6 +48,7 @@ export function EditHistoryForm({ trade, onClose }: { trade: TradeDTO; onClose: 
         upeti: num(upeti),
         fillPrice: fillPrice === '' ? undefined : num(fillPrice),
         fillShares: fillShares === '' ? null : num(fillShares),
+        fillDate,
         exitPrice: num(exitPrice),
         exitDate,
         entrySignal,
@@ -92,6 +95,10 @@ export function EditHistoryForm({ trade, onClose }: { trade: TradeDTO; onClose: 
         <label className="block">Quantity
           <input type="number" step="1" min="1" value={fillShares} onChange={(e) => setFillShares(e.target.value)} className={inputCls(fillSharesErr)} placeholder={`${trade.shares} (computed)`} />
           {err(fillSharesErr)}
+        </label>
+        <label className="block">Fill date
+          <input type="date" value={fillDate} onChange={(e) => setFillDate(e.target.value)} className={inputCls(fillDateErr)} />
+          {err(fillDateErr)}
         </label>
         <label className="block">Exit price
           <input type="number" step="any" value={exitPrice} onChange={(e) => setExitPrice(e.target.value)} className={inputCls(exitPriceErr)} />

@@ -35,6 +35,7 @@ export const patchTradeSchema = z.object({
   // partial fix isn't blocked by cross-field rules that only apply at creation.
   fillPrice: z.number().positive().optional(),
   fillShares: z.number().int().positive().nullable().optional(),
+  fillDate: isoDate.optional(),
   exitPrice: z.number().positive().optional(),
   exitDate: isoDate.optional(),
 });
