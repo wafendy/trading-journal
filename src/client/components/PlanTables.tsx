@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Check, X, Save, Pencil, LogOut } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { SignalPill } from './SignalPill';
@@ -21,6 +22,11 @@ function daysUntil(iso: string | null): number | null {
   const today = new Date(todayISO() + 'T00:00:00Z').getTime();
   return Math.round((target - today) / MS_PER_DAY);
 }
+// Whole calendar days since an ISO date up to today (0 if today/future), or null.
+function daysSince(iso: string | null): number | null {
+  const d = daysUntil(iso);
+  return d === null ? null : Math.max(0, -d);
+}
 // Earnings within the next 7 days (0–7 inclusive, not past) → warn.
 function earningsSoon(iso: string | null): number | null {
   const d = daysUntil(iso);
@@ -28,7 +34,24 @@ function earningsSoon(iso: string | null): number | null {
 }
 const earningsMissing = (iso: string | null) => iso == null || iso === '';
 
-function Row({ t, children, flagged, warnEarnings, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; onOpen?: (t: TradeDTO) => void }) {
+function IconButton({ label, onClick, className, children }: { label: string; onClick: () => void; className?: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={`group relative inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded ${className ?? ''}`}
+    >
+      {children}
+      <span className="pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-1.5 py-0.5 text-[10px] text-white group-hover:block dark:bg-slate-700">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function Row({ t, children, flagged, warnEarnings, showHeld, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; showHeld?: boolean; onOpen?: (t: TradeDTO) => void }) {
+  const held = showHeld ? daysSince(t.fillDate) : null;
   const soon = warnEarnings ? earningsSoon(t.earningsDate) : null;
   // Yellow earnings warning when the row isn't already flagged red (dud takes precedence).
   const earningsWarn = warnEarnings && !flagged && (soon !== null || earningsMissing(t.earningsDate));
@@ -59,6 +82,9 @@ function Row({ t, children, flagged, warnEarnings, onOpen }: { t: TradeDTO; chil
           {t.fillDate ? `filled @ ${money(t.fillPrice)} · ${t.fillDate}` : '—'}
         </div>
       </td>
+      {showHeld && (
+        <td className="px-3 py-2">{held === null ? '—' : held}</td>
+      )}
       <td className="px-3 py-2">{money(t.slPrice)}</td>
       <td className="px-3 py-2">{money(t.tpPrice)}</td>
       <td className="px-3 py-2">
@@ -80,10 +106,10 @@ function Row({ t, children, flagged, warnEarnings, onOpen }: { t: TradeDTO; chil
   );
 }
 
-function HeaderRow() {
+function HeaderRow({ showHeld }: { showHeld?: boolean }) {
   return (
     <thead><tr>
-      <th className={th}>Ticker</th><th className={th}>Shares</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Earnings</th><th className={th}>Signal</th><th className={th}>Actions</th>
+      <th className={th}>Ticker</th><th className={th}>Shares</th><th className={th}>Entry</th>{showHeld && <th className={th}>Held</th>}<th className={th}>SL</th><th className={th}>TP</th><th className={th}>Earnings</th><th className={th}>Signal</th><th className={th}>Actions</th>
     </tr></thead>
   );
 }
@@ -110,9 +136,9 @@ export function PendingOrders() {
         <tbody>
           {pending.data?.map((t) => (
             <Row key={t.id} t={t} onOpen={setViewing}>
-              <span className="flex gap-2">
-                <button onClick={() => setFilling(t)} className="cursor-pointer rounded bg-emerald-600 px-2 py-0.5 text-xs text-white">Mark filled</button>
-                <button onClick={() => setCancelling(t)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Cancel</button>
+              <span className="flex gap-1">
+                <IconButton label="Mark filled" onClick={() => setFilling(t)} className="bg-emerald-600 text-white"><Check className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Cancel" onClick={() => setCancelling(t)} className="bg-red-600 text-white"><X className="h-3.5 w-3.5" /></IconButton>
               </span>
             </Row>
           ))}
@@ -174,20 +200,20 @@ export function ActivePositions() {
         </div>
       )}
       <table className="w-full text-sm">
-        <HeaderRow />
+        <HeaderRow showHeld />
         <tbody>
           {filled.data?.map((t) => (
-            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings onOpen={setViewing}>
-              <span className="flex items-center gap-2">
+            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings showHeld onOpen={setViewing}>
+              <span className="flex items-center gap-1">
                 {t.dudFlagged && (
-                  <button onClick={() => keep.mutate(t.id)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Keep</button>
+                  <IconButton label="Keep" onClick={() => keep.mutate(t.id)} className="bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100"><Save className="h-3.5 w-3.5" /></IconButton>
                 )}
-                <button onClick={() => setEditing(t)} className="cursor-pointer rounded bg-slate-300 dark:bg-slate-600 px-2 py-0.5 text-xs text-slate-900 dark:text-slate-100">Edit</button>
-                <button onClick={() => setExiting(t)} className={`cursor-pointer rounded px-2 py-0.5 text-xs text-white ${t.dudFlagged ? 'bg-red-600' : 'bg-slate-500 dark:bg-slate-500'}`}>Exit</button>
+                <IconButton label="Edit" onClick={() => setEditing(t)} className="bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100"><Pencil className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Exit" onClick={() => setExiting(t)} className={`text-white ${t.dudFlagged ? 'bg-red-600' : 'bg-slate-500 dark:bg-slate-500'}`}><LogOut className="h-3.5 w-3.5" /></IconButton>
               </span>
             </Row>
           ))}
-          {filled.data?.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
+          {filled.data?.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
         </tbody>
       </table>
 

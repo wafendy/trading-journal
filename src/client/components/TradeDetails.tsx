@@ -5,6 +5,19 @@ import type { ReactNode } from 'react';
 
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
+// Optional ticker link templates, e.g. "https://.../?symbol=${TICKER}". Each configured
+// template becomes an outbound link in the details modal (in list order); none → no links.
+const TICKER_LINKS: { label: string; site: string; template: string }[] = [
+  { label: 'T1MO', site: 'T1MO', template: import.meta.env.VITE_T1MO_URL_TEMPLATE ?? '' },
+  { label: 'TradingView', site: 'TradingView', template: import.meta.env.VITE_TRADING_VIEW_URL_TEMPLATE ?? '' },
+  { label: 'Yahoo Finance', site: 'Yahoo Finance', template: import.meta.env.VITE_YAHOO_FINANCE_URL_TEMPLATE ?? '' },
+].filter((l) => l.template);
+
+function tickerLinks(ticker: string): { label: string; site: string; url: string }[] {
+  const sym = encodeURIComponent(ticker.toUpperCase());
+  return TICKER_LINKS.map((l) => ({ label: l.label, site: l.site, url: l.template.replace(/\$?\{TICKER\}/g, sym) }));
+}
+
 /** One label/value cell in the details grid. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -51,8 +64,25 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
   const pnl = trade.realizedPnl != null
     ? `${money(trade.realizedPnl)}${trade.rMultiple != null ? ` (${trade.rMultiple >= 0 ? '+' : ''}${trade.rMultiple.toFixed(2)}R)` : ''}`
     : '—';
+  const links = tickerLinks(trade.ticker);
   return (
     <Modal title={`${trade.ticker} — trade details`} onClose={onClose}>
+      {links.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {links.map(({ label, site, url }) => (
+            <a
+              key={label}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded bg-slate-200 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-sky-300 dark:hover:bg-slate-600"
+              title={`Open ${trade.ticker} on ${site}`}
+            >
+              {label} ↗
+            </a>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
         <Field label="Status">{STATUS_LABEL[trade.status]}</Field>
         <div />

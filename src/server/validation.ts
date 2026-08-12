@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 const entryType = z.enum(['buy_limit', 'buy_stop']);
-const entrySignal = z.enum(['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec']);
+const entrySignal = z.enum(['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal']);
 const verifyDays = z.union([z.literal(5), z.literal(7), z.literal(10), z.literal(14)]);
 
 export const createTradeSchema = z.object({

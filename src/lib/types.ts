@@ -1,5 +1,5 @@
 export type EntryType = 'buy_limit' | 'buy_stop';
-export type EntrySignal = 'btb' | 'buy_lautan' | 'buy_magenta' | 'hawk1' | 'buy_spec';
+export type EntrySignal = 'btb' | 'buy_lautan' | 'buy_magenta' | 'hawk1' | 'buy_spec' | 'no_signal';
 export type TradeStatus = 'pending' | 'filled' | 'exited';
 export type VerifyDays = 5 | 7 | 10 | 14;
 export type DudDecision = null | 'keep' | 'exit';

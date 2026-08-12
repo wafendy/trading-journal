@@ -3,7 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
-import type { TradeDTO } from '../../lib/types';
+import { SIGNAL_LABELS } from './SignalPill';
+import type { TradeDTO, EntrySignal } from '../../lib/types';
+
+const SIGNALS = Object.keys(SIGNAL_LABELS) as EntrySignal[];
 
 /** Edit an active position's SL, TP and earnings date. */
 export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose: () => void }) {
@@ -12,6 +15,7 @@ export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose:
   const [slPrice, setSlPrice] = useState(String(trade.slPrice));
   const [tpPrice, setTpPrice] = useState(trade.tpPrice != null ? String(trade.tpPrice) : '');
   const [earningsDate, setEarningsDate] = useState(trade.earningsDate ?? '');
+  const [entrySignal, setEntrySignal] = useState<EntrySignal>(trade.entrySignal);
 
   const entry = trade.entryPrice;
   const s = Number(slPrice), tp = Number(tpPrice);
@@ -24,6 +28,7 @@ export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose:
         slPrice: Number(slPrice),
         tpPrice: tpPrice === '' ? null : Number(tpPrice),
         earningsDate: earningsDate === '' ? null : earningsDate,
+        entrySignal,
       }),
     onSuccess: () => { qc.invalidateQueries(); toast('Position updated'); onClose(); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
@@ -46,6 +51,11 @@ export function EditPositionForm({ trade, onClose }: { trade: TradeDTO; onClose:
         </label>
         <label className="block">Earnings date
           <input type="date" value={earningsDate} onChange={(e) => setEarningsDate(e.target.value)} className={inputCls('')} />
+        </label>
+        <label className="block">Entry signal
+          <select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className={inputCls('')}>
+            {SIGNALS.map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}
+          </select>
         </label>
       </div>
       <div className="mt-4 flex justify-end gap-2">

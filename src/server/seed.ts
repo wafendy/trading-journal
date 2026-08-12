@@ -78,7 +78,7 @@ const daysFromNow = (n: number) => { const d = new Date(today); d.setUTCDate(d.g
 const addDaysISO = (base: string, n: number) => { const d = new Date(base + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
 const thisYear = today.getUTCFullYear();
 
-const SIGNALS: readonly EntrySignal[] = ['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec'];
+const SIGNALS: readonly EntrySignal[] = ['btb', 'buy_lautan', 'buy_magenta', 'hawk1', 'buy_spec', 'no_signal'];
 const TYPES: readonly EntryType[] = ['buy_limit', 'buy_stop'];
 const VERIFY: readonly VerifyDays[] = [5, 7, 10, 14];
 const TICKERS = [
@@ -128,12 +128,12 @@ function randomPlan(earningsDate: string, withNote: boolean): PlanSeed {
 }
 
 // ── Pending orders (≤10) — guarantee every entry signal appears ──────────────
-// First 5 cover each signal (btb, buy_lautan, buy_magenta, hawk1, buy_spec),
-// then 5 more are random, for 10 total.
+// First 6 cover each signal (btb, buy_lautan, buy_magenta, hawk1, buy_spec, no_signal),
+// then 4 more are random, for 10 total.
 SIGNALS.forEach((signal, i) => {
   mk({ ...randomPlan(daysFromNow(60 + i * 3), rnd() < 0.5), entrySignal: signal });
 });
-for (let i = 0; i < 5; i++) {
+for (let i = 0; i < 4; i++) {
   mk(randomPlan(daysFromNow(75 + i * 3), rnd() < 0.5));
 }
 
