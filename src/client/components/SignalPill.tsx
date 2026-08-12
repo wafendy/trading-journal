@@ -1,7 +1,7 @@
 import type { EntrySignal } from '../../lib/types';
 
 export const SIGNAL_LABELS: Record<EntrySignal, string> = {
-  btb: 'BTB', buy_lautan: 'Buy Lautan', buy_magenta: 'Buy Magenta', hawk1: 'Hawk1', buy_spec: 'Buy Spec', no_signal: 'No Signal',
+  btb: 'BTB', buy_lautan: 'Buy Lautan', buy_magenta: 'Buy Magenta', hawk1: 'Hawk1', buy_spec: 'Spec Buy', no_signal: 'No Signal',
 };
 
 // green / light blue / magenta / dark green / pink / gray
