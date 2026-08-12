@@ -3,9 +3,12 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { SignalPill } from './SignalPill';
 import { TradeDetails, NoteIcon } from './TradeDetails';
+import { EditHistoryForm } from './EditHistoryForm';
 import type { TradeDTO } from '../../lib/types';
 
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
+// Off by default. Set VITE_ALLOW_HISTORY_EDIT=true to reveal per-row correction actions.
+const ALLOW_EDIT = import.meta.env.VITE_ALLOW_HISTORY_EDIT === 'true';
 
 export function HistoryTable({ year }: { year: number | null }) {
   const q = useInfiniteQuery({
@@ -16,6 +19,7 @@ export function HistoryTable({ year }: { year: number | null }) {
     enabled: year !== null,
   });
   const [selected, setSelected] = useState<TradeDTO | null>(null);
+  const [editing, setEditing] = useState<TradeDTO | null>(null);
   const sentinel = useRef<HTMLTableRowElement>(null);
   useEffect(() => {
     if (!sentinel.current) return;
@@ -32,7 +36,7 @@ export function HistoryTable({ year }: { year: number | null }) {
       <table className="w-full text-sm">
         <thead><tr>
           <th className={th}>Ticker</th><th className={th}>Entry</th><th className={th}>SL</th><th className={th}>TP</th><th className={th}>Shares</th>
-          <th className={th}>Exit</th><th className={th}>Signal</th><th className={th}>UPETI</th><th className={th}>Realized P&L</th>
+          <th className={th}>Exit</th><th className={th}>Signal</th><th className={th}>UPETI</th><th className={th}>Realized P&L</th>{ALLOW_EDIT && <th className={th}>Actions</th>}
         </tr></thead>
         <tbody>
           {rows.map((t) => (
@@ -63,14 +67,20 @@ export function HistoryTable({ year }: { year: number | null }) {
               <td className={`px-3 py-2 font-semibold ${(t.realizedPnl ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {money(t.realizedPnl)} <span className="text-xs text-slate-500 dark:text-slate-400">({t.rMultiple != null ? `${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)}R` : '—'})</span>
               </td>
+              {ALLOW_EDIT && (
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setEditing(t)} className="cursor-pointer rounded bg-slate-300 px-2 py-0.5 text-xs text-slate-900 dark:bg-slate-600 dark:text-slate-100">Edit</button>
+                </td>
+              )}
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-slate-500 dark:text-slate-500">No exited trades yet.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={ALLOW_EDIT ? 10 : 9} className="px-3 py-3 text-slate-500 dark:text-slate-500">No exited trades yet.</td></tr>}
           <tr ref={sentinel} />
         </tbody>
       </table>
       {q.isFetchingNextPage && <div className="py-3 text-center text-slate-500 dark:text-slate-500 text-sm">Loading…</div>}
       {selected && <TradeDetails trade={selected} onClose={() => setSelected(null)} />}
+      {editing && <EditHistoryForm trade={editing} onClose={() => setEditing(null)} />}
     </section>
   );
 }

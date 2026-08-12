@@ -90,7 +90,7 @@ export default function App() {
           </div>
         )}
 
-        <TradeForm open={formOpen} onClose={() => setFormOpen(false)} />
+        <TradeForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={() => setTab('pending')} />
       </div>
     </div>
   );

@@ -36,7 +36,7 @@ describe('create + lifecycle', () => {
 
   it('fill then exit moves to history', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
-    ctx.repo.fill(t.id, '2026-08-04', 50);
+    ctx.repo.fill(t.id, '2026-08-04', 50, null);
     expect(ctx.repo.getById(t.id)!.status).toBe('filled');
     ctx.repo.exit(t.id, 55, '2026-08-20');
     const done = ctx.repo.getById(t.id)!;
@@ -52,7 +52,7 @@ describe('create + lifecycle', () => {
 
   it('cannot cancel a filled order', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
-    ctx.repo.fill(t.id, '2026-08-04', 50);
+    ctx.repo.fill(t.id, '2026-08-04', 50, null);
     expect(() => ctx.repo.cancel(t.id)).toThrow(ConflictError);
   });
 
@@ -84,10 +84,16 @@ describe('fill captures price', () => {
   beforeEach(() => { ctx = setup(); });
   it('persists fillDate and fillPrice', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
-    const f = ctx.repo.fill(t.id, '2026-08-04', 52);
+    const f = ctx.repo.fill(t.id, '2026-08-04', 52, null);
     expect(f.status).toBe('filled');
     expect(f.fillDate).toBe('2026-08-04');
     expect(f.fillPrice).toBe(52);
+    expect(f.fillShares).toBeNull();
+  });
+  it('persists a manual fill quantity', () => {
+    const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
+    const f = ctx.repo.fill(t.id, '2026-08-04', 52, 18);
+    expect(f.fillShares).toBe(18);
   });
 });
 
@@ -108,7 +114,7 @@ describe('settings', () => {
 describe('history + years', () => {
   const mkExited = (repo: ReturnType<typeof createRepo>, exitDate: string) => {
     const t = repo.create({ ...base, ticker: 'AAPL' });
-    repo.fill(t.id, '2025-01-02', 50);
+    repo.fill(t.id, '2025-01-02', 50, null);
     repo.exit(t.id, 55, exitDate);
     return t.id;
   };
@@ -116,7 +122,7 @@ describe('history + years', () => {
   it('filters by exit year, newest first, paginates (monotonic ids)', () => {
     const { repo } = setup();
     mkExited(repo, '2025-03-01'); mkExited(repo, '2025-04-01'); mkExited(repo, '2025-05-01');
-    const t2024 = repo.create({ ...base }); repo.fill(t2024.id, '2024-01-02', 50); repo.exit(t2024.id, 55, '2024-06-01');
+    const t2024 = repo.create({ ...base }); repo.fill(t2024.id, '2024-01-02', 50, null); repo.exit(t2024.id, 55, '2024-06-01');
 
     expect(repo.years()).toEqual([2025, 2024]);
     const page1 = repo.history(2025, null, 2);

@@ -14,7 +14,7 @@ export interface TradeRepo {
   years(): number[];
   getById(id: number): TradeRow | undefined;
   patch(id: number, input: PatchTradeInput): TradeRow;
-  fill(id: number, fillDate: string, fillPrice: number): TradeRow;
+  fill(id: number, fillDate: string, fillPrice: number, fillShares: number | null): TradeRow;
   cancel(id: number): void;
   exit(id: number, exitPrice: number, exitDate: string): TradeRow;
   dudKeep(id: number): TradeRow;
@@ -75,10 +75,10 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       db.update(trades).set({ ...input, updatedAt: now() }).where(eq(trades.id, id)).run();
       return require(id);
     },
-    fill(id, fillDate, fillPrice) {
+    fill(id, fillDate, fillPrice, fillShares) {
       const t = require(id);
       if (t.status !== 'pending') throw new ConflictError('only pending orders can be filled');
-      db.update(trades).set({ status: 'filled', fillDate, fillPrice, updatedAt: now() }).where(eq(trades.id, id)).run();
+      db.update(trades).set({ status: 'filled', fillDate, fillPrice, fillShares, updatedAt: now() }).where(eq(trades.id, id)).run();
       return require(id);
     },
     cancel(id) {

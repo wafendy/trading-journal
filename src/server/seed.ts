@@ -149,7 +149,7 @@ const demoActive: { plan: PlanSeed; fill: string; keep?: boolean; nullEarn?: boo
 ];
 for (const a of demoActive) {
   const t = mk(a.plan);
-  repo.fill(t.id, a.fill, jitterFill(a.plan.entryPrice));
+  repo.fill(t.id, a.fill, jitterFill(a.plan.entryPrice), null);
   if (a.keep) repo.dudKeep(t.id);
   if (a.nullEarn) clearEarnings(t.id);
 }
@@ -159,7 +159,7 @@ for (let i = 0; i < EXTRA_ACTIVE; i++) {
   const fillDate = daysFromNow(-(1 + Math.floor(rnd() * 3)));
   const plan = randomPlan(daysFromNow(20 + Math.floor(rnd() * 80)), rnd() < 0.5);
   const t = mk(plan);
-  repo.fill(t.id, fillDate, jitterFill(plan.entryPrice));
+  repo.fill(t.id, fillDate, jitterFill(plan.entryPrice), null);
 }
 
 // ── Exited trades → Trading History (100+ total) ─────────────────────────────
@@ -191,7 +191,7 @@ for (const [yStr, target] of Object.entries(perYear)) {
       ? round2(plan.entryPrice * between(1.03, 1.3))
       : round2(plan.entryPrice * between(0.82, 0.99));
     const t = mk(plan);
-    repo.fill(t.id, fillDate, plan.entryPrice);
+    repo.fill(t.id, fillDate, plan.entryPrice, null);
     repo.exit(t.id, exitPrice, exitDate);
     made++; created++;
   }

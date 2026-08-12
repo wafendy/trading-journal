@@ -15,6 +15,7 @@ export const trades = sqliteTable('trades', {
   status: text('status').notNull().default('pending'),
   fillDate: text('fill_date'),
   fillPrice: real('fill_price'),
+  fillShares: integer('fill_shares'),
   dudDecision: text('dud_decision'),
   exitPrice: real('exit_price'),
   exitDate: text('exit_date'),

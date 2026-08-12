@@ -1,0 +1,1 @@
+ALTER TABLE `trades` ADD `fill_shares` integer;

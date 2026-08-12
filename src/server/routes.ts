@@ -54,7 +54,7 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings }: Deps):
     // Cost basis is the actual fill price when known, else the planned entry —
     // identical to deriveTrade, so summary matches the history table.
     const pnlOf = (r: TradeRow) => {
-      const shares = computeShares(r.upeti, r.entryPrice, r.slPrice);
+      const shares = r.fillShares ?? computeShares(r.upeti, r.entryPrice, r.slPrice);
       return computePnl(r.fillPrice ?? r.entryPrice, r.exitPrice as number, shares);
     };
     let cum = 0;
@@ -103,8 +103,8 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings }: Deps):
   });
 
   api.post('/trades/:id/fill', async (c) => {
-    const { fillDate, fillPrice } = fillSchema.parse(await c.req.json());
-    return c.json(dto(repo.fill(Number(c.req.param('id')), fillDate, fillPrice)));
+    const { fillDate, fillPrice, fillShares } = fillSchema.parse(await c.req.json());
+    return c.json(dto(repo.fill(Number(c.req.param('id')), fillDate, fillPrice, fillShares ?? null)));
   });
 
   api.post('/trades/:id/cancel', (c) => {

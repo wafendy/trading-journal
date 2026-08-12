@@ -25,7 +25,7 @@ function rollForward90(iso: string): string {
 }
 const SIGNALS = Object.keys(SIGNAL_LABELS) as EntrySignal[];
 
-export function TradeForm({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated?: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
@@ -108,7 +108,7 @@ export function TradeForm({ open, onClose }: { open: boolean; onClose: () => voi
       ticker, upeti: Number(upeti), entryPrice: Number(entryPrice), slPrice: Number(slPrice),
       tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, earningsDate, notes: notes.trim() || null, verifyDays: settings.data?.verifyDays ?? 5,
     }),
-    onSuccess: () => { qc.invalidateQueries(); toast('Trade plan created'); reset(); onClose(); },
+    onSuccess: () => { qc.invalidateQueries(); toast('Trade plan created'); reset(); onClose(); onCreated?.(); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
   });
 

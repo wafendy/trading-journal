@@ -31,9 +31,15 @@ export const patchTradeSchema = z.object({
   earningsDate: isoDate.optional(),
   notes: z.string().max(2000).nullable().optional(),
   verifyDays: verifyDays.optional(),
+  // History corrections: exit values + entry basis. Left optional/lenient so a
+  // partial fix isn't blocked by cross-field rules that only apply at creation.
+  fillPrice: z.number().positive().optional(),
+  fillShares: z.number().int().positive().nullable().optional(),
+  exitPrice: z.number().positive().optional(),
+  exitDate: isoDate.optional(),
 });
 
-export const fillSchema = z.object({ fillDate: isoDate, fillPrice: z.number().positive() });
+export const fillSchema = z.object({ fillDate: isoDate, fillPrice: z.number().positive(), fillShares: z.number().int().positive().optional() });
 export const settingsSchema = z.object({
   upeti: z.number().positive().optional(),
   verifyDays: verifyDays.optional(),

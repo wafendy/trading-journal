@@ -30,7 +30,7 @@ export const api = {
     fetch(`/api/earnings?ticker=${encodeURIComponent(ticker)}`).then(json<{ earningsDate: string | null }>),
   create: (b: unknown) => post('/api/trades', b).then(json<TradeDTO>),
   patch: (id: number, b: unknown) => fetch(`/api/trades/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<TradeDTO>),
-  fill: (id: number, fillDate: string, fillPrice: number) => post(`/api/trades/${id}/fill`, { fillDate, fillPrice }).then(json<TradeDTO>),
+  fill: (id: number, fillDate: string, fillPrice: number, fillShares: number) => post(`/api/trades/${id}/fill`, { fillDate, fillPrice, fillShares }).then(json<TradeDTO>),
   cancel: (id: number) => post(`/api/trades/${id}/cancel`).then((r) => { if (!r.ok) throw new Error('cancel failed'); }),
   exit: (id: number, exitPrice: number, exitDate: string) => post(`/api/trades/${id}/exit`, { exitPrice, exitDate }).then(json<TradeDTO>),
   dudDecision: (id: number, b: unknown) => post(`/api/trades/${id}/dud-decision`, b).then(json<TradeDTO>),

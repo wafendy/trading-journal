@@ -39,7 +39,8 @@ export function isDudFlagged(
 }
 
 export function deriveTrade(row: TradeRow, todayISO: string): TradeDTO {
-  const shares = computeShares(row.upeti, row.entryPrice, row.slPrice);
+  // A manually-entered fill quantity overrides the planned size once captured.
+  const shares = row.fillShares ?? computeShares(row.upeti, row.entryPrice, row.slPrice);
   const exited = row.status === 'exited' && row.exitPrice !== null;
   const costBasis = row.fillPrice ?? row.entryPrice;
   const realizedPnl = exited ? computePnl(costBasis, row.exitPrice as number, shares) : null;

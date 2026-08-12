@@ -36,6 +36,17 @@ describe('patchTradeSchema', () => {
     const r = patchTradeSchema.parse({ earningsDate: '2026-09-01' });
     expect(r.earningsDate).toBe('2026-09-01');
   });
+  it('accepts history-correction fields (exit values + basis)', () => {
+    const r = patchTradeSchema.parse({ exitPrice: 55.1, exitDate: '2026-08-20', fillPrice: 50, fillShares: 18 });
+    expect(r).toEqual({ exitPrice: 55.1, exitDate: '2026-08-20', fillPrice: 50, fillShares: 18 });
+  });
+  it('accepts null fillShares (revert to computed size)', () => {
+    expect(patchTradeSchema.parse({ fillShares: null }).fillShares).toBeNull();
+  });
+  it('rejects a non-positive exitPrice and a bad exitDate', () => {
+    expect(() => patchTradeSchema.parse({ exitPrice: 0 })).toThrow();
+    expect(() => patchTradeSchema.parse({ exitDate: '08/20/2026' })).toThrow();
+  });
 });
 
 describe('dudDecisionSchema', () => {

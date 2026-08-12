@@ -54,7 +54,7 @@ describe('deriveTrade', () => {
   const row: TradeRow = {
     id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: 60,
     entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', notes: null, verifyDays: 5,
-    status: 'exited', fillDate: '2026-08-03', fillPrice: null, dudDecision: null, exitPrice: 55, exitDate: '2026-08-20',
+    status: 'exited', fillDate: '2026-08-03', fillPrice: null, fillShares: null, dudDecision: null, exitPrice: 55, exitDate: '2026-08-20',
     createdAt: '2026-08-03T00:00:00Z', updatedAt: '2026-08-20T00:00:00Z',
   };
   it('computes shares, pnl, r for exited', () => {
@@ -75,7 +75,7 @@ describe('deriveTrade cost basis', () => {
   const base: TradeRow = {
     id: 1, ticker: 'AAPL', upeti: 1000, entryPrice: 50, slPrice: 45, tpPrice: null,
     entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', notes: null,
-    verifyDays: 5, status: 'exited', fillDate: '2026-08-04', fillPrice: 52, dudDecision: null,
+    verifyDays: 5, status: 'exited', fillDate: '2026-08-04', fillPrice: 52, fillShares: null, dudDecision: null,
     exitPrice: 60, exitDate: '2026-08-20', createdAt: 'x', updatedAt: 'x',
   };
   it('uses fillPrice as cost basis when present', () => {

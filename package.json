@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:backup": "tsx src/server/backup.ts",
     "seed": "tsx src/server/seed.ts",
     "seed:reset": "tsx src/server/seed.ts --reset"
   },

@@ -19,6 +19,7 @@ export interface TradeRow {
   status: TradeStatus;
   fillDate: string | null;
   fillPrice: number | null;
+  fillShares: number | null;
   dudDecision: DudDecision;
   exitPrice: number | null;
   exitDate: string | null;
