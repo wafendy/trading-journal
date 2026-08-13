@@ -56,6 +56,21 @@ describe('create + lifecycle', () => {
     expect(() => ctx.repo.cancel(t.id)).toThrow(ConflictError);
   });
 
+  it('deleteExited removes an exited trade', () => {
+    const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
+    ctx.repo.fill(t.id, '2026-08-04', 50, null);
+    ctx.repo.exit(t.id, 55, '2026-08-20');
+    ctx.repo.deleteExited(t.id);
+    expect(ctx.repo.getById(t.id)).toBeUndefined();
+  });
+
+  it('cannot deleteExited a pending or filled trade', () => {
+    const p = ctx.repo.create({ ...base, ticker: 'AAPL' });
+    expect(() => ctx.repo.deleteExited(p.id)).toThrow(ConflictError);
+    ctx.repo.fill(p.id, '2026-08-04', 50, null);
+    expect(() => ctx.repo.deleteExited(p.id)).toThrow(ConflictError);
+  });
+
   it('cannot exit a pending order', () => {
     const t = ctx.repo.create({ ...base, ticker: 'AAPL' });
     expect(() => ctx.repo.exit(t.id, 55, '2026-08-20')).toThrow(ConflictError);

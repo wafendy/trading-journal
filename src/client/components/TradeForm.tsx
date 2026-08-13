@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { computeShares } from '../../lib/calc';
@@ -36,6 +36,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   const [ticker, setTicker] = useState('');
   const [upeti, setUpeti] = useState('');
   const [entryPrice, setEntryPrice] = useState('');
+  const entryPriceRef = useRef<HTMLInputElement>(null);
   const [slPrice, setSlPrice] = useState('');
   const [tpPrice, setTpPrice] = useState('');
   // Track manual edits so auto-defaults (SL 5% below, TP 10% above entry) only
@@ -132,7 +133,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
     <Modal title="New Trade Plan" onClose={onClose}>
       <div className="grid grid-cols-3 gap-3 text-sm">
         {/* Row 1 */}
-        <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} onBlur={lookupEarnings} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
+        <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} onBlur={lookupEarnings} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupEarnings(); entryPriceRef.current?.focus(); } }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         <label>Earnings date<input type="date" min={today} value={earningsDate} onChange={(ev) => { setEarningsEdited(true); setEarningsStatus('idle'); setEarningsDate(rollForward90(ev.target.value)); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${earningsDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{earningsDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{earningsDateError}</span>}{!earningsDateError && earningsStatus === 'loading' && <span className="mt-1 block text-xs text-slate-400">Looking up earnings…</span>}{!earningsDateError && earningsStatus === 'fetched' && <span className="mt-1 block text-xs text-slate-400">Fetched from Finnhub</span>}{!earningsDateError && earningsStatus === 'notfound' && <span className="mt-1 block text-xs text-slate-400">No earnings date found — enter manually</span>}</label>
         <div />
         {/* Row 2 */}
@@ -145,7 +146,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
         <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS_BY_DIRECTION[direction].map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
         <label>Entry type<select value={entryType} onChange={(e) => setEntryType(e.target.value as EntryType)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{ENTRY_TYPES[direction].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
         {/* Row 3 */}
-        <label>Entry price<input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
+        <label>Entry price<input ref={entryPriceRef} type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         <label>SL price<input type="number" step="any" value={slPrice} onChange={(ev) => { setSlEdited(true); setSlPrice(ev.target.value); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${slError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{slError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{slError}</span>}</label>
         <label>TP price (optional)<input type="number" step="any" value={tpPrice} onChange={(ev) => { setTpEdited(true); setTpPrice(ev.target.value); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${tpError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{tpError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{tpError}</span>}</label>
         {/* Notes */}

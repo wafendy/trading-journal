@@ -16,6 +16,7 @@ export interface TradeRepo {
   patch(id: number, input: PatchTradeInput): TradeRow;
   fill(id: number, fillDate: string, fillPrice: number, fillShares: number | null): TradeRow;
   cancel(id: number): void;
+  deleteExited(id: number): void;
   exit(id: number, exitPrice: number, exitDate: string): TradeRow;
   dudKeep(id: number): TradeRow;
   getSettings(): { upeti: number; verifyDays: number };
@@ -84,6 +85,11 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
     cancel(id) {
       const t = require(id);
       if (t.status !== 'pending') throw new ConflictError('only pending orders can be cancelled');
+      db.delete(trades).where(eq(trades.id, id)).run();
+    },
+    deleteExited(id) {
+      const t = require(id);
+      if (t.status !== 'exited') throw new ConflictError('only exited (history) trades can be deleted');
       db.delete(trades).where(eq(trades.id, id)).run();
     },
     exit(id, exitPrice, exitDate) {

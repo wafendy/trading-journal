@@ -8,9 +8,10 @@ function setup() {
   migrateDb(db);
   let clock = '2026-08-10T00:00:00Z';
   let earnings: string | null = null;
+  let quote: number | null = null;
   const repo = createRepo(db, () => clock);
-  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings });
-  return { app, repo, setClock: (c: string) => (clock = c), setEarnings: (d: string | null) => (earnings = d) };
+  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote });
+  return { app, repo, setClock: (c: string) => (clock = c), setEarnings: (d: string | null) => (earnings = d), setQuote: (p: number | null) => (quote = p) };
 }
 
 const body = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', verifyDays: 5 };
@@ -55,6 +56,43 @@ describe('lifecycle endpoints', () => {
     const created = await (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
     const res = await app.request(`/api/trades/${created.id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 55, exitDate: '2026-08-20' }) });
     expect(res.status).toBe(409);
+  });
+
+  it('DELETE removes an exited trade from history', async () => {
+    const { app } = setup();
+    const created = await (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+    await app.request(`/api/trades/${created.id}/fill`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fillDate: '2026-08-04', fillPrice: 50 }) });
+    await app.request(`/api/trades/${created.id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 55, exitDate: '2026-08-20' }) });
+
+    const del = await app.request(`/api/trades/${created.id}`, { method: 'DELETE' });
+    expect(del.status).toBe(204);
+    const hist = await (await app.request('/api/trades/history?year=2026&limit=50')).json();
+    expect(hist.items).toHaveLength(0);
+  });
+
+  it('DELETE on a pending trade returns 409', async () => {
+    const { app } = setup();
+    const created = await (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+    const res = await app.request(`/api/trades/${created.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('GET /api/quote', () => {
+  it('returns the provider price', async () => {
+    const { app, setQuote } = setup();
+    setQuote(123.45);
+    const res = await app.request('/api/quote?ticker=aapl');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ price: 123.45 });
+  });
+  it('returns null price when the provider has none', async () => {
+    const { app } = setup(); // quote defaults to null
+    expect(await (await app.request('/api/quote?ticker=AAPL')).json()).toEqual({ price: null });
+  });
+  it('rejects an invalid ticker', async () => {
+    const { app } = setup();
+    expect((await app.request('/api/quote?ticker=')).status).toBe(400);
   });
 });
 

@@ -6,10 +6,11 @@ import { createTradeSchema, patchTradeSchema, fillSchema, exitSchema, dudDecisio
 import { deriveTrade, computePnl, computeShares, computeR } from '../lib/calc';
 import type { TradeRow, EntrySignal } from '../lib/types';
 import type { EarningsProvider } from './earnings';
+import type { QuoteProvider } from './quotes';
 
-export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; }
+export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; }
 
-export function registerRoutes(api: Hono, { repo, now, getNextEarnings }: Deps): void {
+export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote }: Deps): void {
   const today = () => now().slice(0, 10);
   const dto = (row: TradeRow) => deriveTrade(row, today());
 
@@ -24,6 +25,15 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings }: Deps):
     if (!/^[A-Z]{1,10}$/.test(ticker)) return c.json({ error: 'valid ticker required' }, 400);
     const earningsDate = await getNextEarnings(ticker, now().slice(0, 10));
     return c.json({ earningsDate });
+  });
+
+  // Live price lookup for unrealized-P&L estimates. Never persisted; price is null
+  // without FINNHUB_API_KEY or for an unknown symbol.
+  api.get('/quote', async (c) => {
+    const ticker = (c.req.query('ticker') ?? '').trim().toUpperCase();
+    if (!/^[A-Z]{1,10}$/.test(ticker)) return c.json({ error: 'valid ticker required' }, 400);
+    const price = await getQuote(ticker);
+    return c.json({ price });
   });
 
   api.get('/trades/history', (c) => {
@@ -109,6 +119,12 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings }: Deps):
 
   api.post('/trades/:id/cancel', (c) => {
     repo.cancel(Number(c.req.param('id')));
+    return c.body(null, 204);
+  });
+
+  // Permanently delete an exited (history) trade.
+  api.delete('/trades/:id', (c) => {
+    repo.deleteExited(Number(c.req.param('id')));
     return c.body(null, 204);
   });
 

@@ -4,12 +4,14 @@ import { createDb, migrateDb } from './db/index';
 import { createRepo } from './repository';
 import { buildApp } from './app';
 import { createFinnhubProvider } from './earnings';
+import { createFinnhubQuoteProvider } from './quotes';
 
 const { db } = createDb(process.env.DB_PATH ?? './trading.db');
 migrateDb(db);
 const repo = createRepo(db, () => new Date().toISOString());
 const getNextEarnings = createFinnhubProvider({ apiKey: process.env.FINNHUB_API_KEY });
-const app = buildApp({ repo, now: () => new Date().toISOString(), getNextEarnings });
+const getQuote = createFinnhubQuoteProvider({ apiKey: process.env.FINNHUB_API_KEY });
+const app = buildApp({ repo, now: () => new Date().toISOString(), getNextEarnings, getQuote });
 
 if (process.env.NODE_ENV === 'production') {
   app.use('/*', serveStatic({ root: './dist' }));

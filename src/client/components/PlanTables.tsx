@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, X, Save, Pencil, LogOut } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { FillModal } from './FillModal';
 import { EditPositionForm } from './EditPositionForm';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { useToast } from './Toast';
+import { computePnl } from '../../lib/calc';
 import type { TradeDTO } from '../../lib/types';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -50,8 +51,11 @@ function IconButton({ label, onClick, className, children }: { label: string; on
   );
 }
 
-function Row({ t, children, flagged, warnEarnings, showHeld, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; showHeld?: boolean; onOpen?: (t: TradeDTO) => void }) {
+function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; showHeld?: boolean; livePrice?: number | null; onOpen?: (t: TradeDTO) => void }) {
   const held = showHeld ? daysSince(t.fillDate) : null;
+  // Estimated unrealized P&L from a manually-fetched live price (not persisted).
+  const costBasis = t.fillPrice ?? t.entryPrice;
+  const unrealized = livePrice != null ? computePnl(costBasis, livePrice, t.shares, t.direction) : null;
   const soon = warnEarnings ? earningsSoon(t.earningsDate) : null;
   // Yellow earnings warning when the row isn't already flagged red (dud takes precedence).
   const earningsWarn = warnEarnings && !flagged && (soon !== null || earningsMissing(t.earningsDate));
@@ -78,18 +82,32 @@ function Row({ t, children, flagged, warnEarnings, showHeld, onOpen }: { t: Trad
         )}
         {t.notes && <NoteIcon />}
       </td>
-      <td className="px-3 py-2">{t.shares}</td>
+      <td className="px-3 py-2"><SignalPill signal={t.entrySignal} /></td>
+      {/* Entry cell folds qty/price + SL/TP (and fill date, for Active) into one column. */}
       <td className="px-3 py-2">
-        <div>{money(t.entryPrice)}</div>
-        <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-          {t.fillDate ? `filled @ ${money(t.fillPrice)} · ${t.fillDate}` : '—'}
+        <div className="leading-tight">
+          <div>{t.shares} @ {money(showHeld ? (t.fillPrice ?? t.entryPrice) : t.entryPrice)}</div>
+          <div className="text-[11px]">
+            <span className="text-red-600 dark:text-red-400">SL: {money(t.slPrice)}</span>
+            {t.tpPrice != null && <span className="ml-2 text-green-600 dark:text-green-400">TP: {money(t.tpPrice)}</span>}
+          </div>
+          {showHeld && t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {t.fillDate}</div>}
         </div>
       </td>
       {showHeld && (
-        <td className="px-3 py-2">{held === null ? '—' : held}</td>
+        <td className="px-3 py-2">
+          {unrealized === null ? (
+            <span className="text-slate-400 dark:text-slate-500">—</span>
+          ) : (
+            <div className="leading-tight">
+              <div className={`font-semibold ${unrealized >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {money(unrealized)}
+              </div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">@ {money(livePrice ?? null)}</div>
+            </div>
+          )}
+        </td>
       )}
-      <td className="px-3 py-2">{money(t.slPrice)}</td>
-      <td className="px-3 py-2">{money(t.tpPrice)}</td>
       <td className="px-3 py-2">
         {t.earningsDate ?? '—'}
         {warnEarnings && earningsMissing(t.earningsDate) && (
@@ -103,7 +121,7 @@ function Row({ t, children, flagged, warnEarnings, showHeld, onOpen }: { t: Trad
           </span>
         )}
       </td>
-      <td className="px-3 py-2"><SignalPill signal={t.entrySignal} /></td>
+      {showHeld && <td className="px-3 py-2">{held === null ? '—' : held}</td>}
       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>{children}</td>
     </tr>
   );
@@ -112,7 +130,7 @@ function Row({ t, children, flagged, warnEarnings, showHeld, onOpen }: { t: Trad
 function HeaderRow({ showHeld }: { showHeld?: boolean }) {
   return (
     <thead><tr>
-      <th className={th}>Ticker</th><th className={th}>Shares</th><th className={th}>Entry</th>{showHeld && <th className={th}>Held</th>}<th className={th}>SL</th><th className={th}>TP</th><th className={th}>Earnings</th><th className={th}>Signal</th><th className={th}>Actions</th>
+      <th className={th}>Ticker</th><th className={th}>Signal</th><th className={th}>Entry</th>{showHeld && <th className={th}>Unrealized P&L</th>}<th className={th}>Earnings</th>{showHeld && <th className={th}>Held</th>}<th className={th}>Actions</th>
     </tr></thead>
   );
 }
@@ -145,7 +163,7 @@ export function PendingOrders() {
               </span>
             </Row>
           ))}
-          {pending.data?.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-500">No trading plans yet</td></tr>}
+          {pending.data?.length === 0 && <tr><td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-500">No trading plans yet</td></tr>}
         </tbody>
       </table>
       {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
@@ -170,6 +188,9 @@ export function ActivePositions() {
   const [exiting, setExiting] = useState<TradeDTO | null>(null);
   const [editing, setEditing] = useState<TradeDTO | null>(null);
   const [viewing, setViewing] = useState<TradeDTO | null>(null);
+  // Manually-fetched live prices, keyed by ticker. In-memory only — never persisted.
+  const [prices, setPrices] = useState<Record<string, number | null>>({});
+  const [pricesAt, setPricesAt] = useState<string | null>(null);
   const inval = () => qc.invalidateQueries();
 
   const keep = useMutation({
@@ -177,6 +198,54 @@ export function ActivePositions() {
     onSuccess: () => { inval(); toast('Kept — will stop reminding'); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),
   });
+
+  // Fetch the current price for each distinct ticker and compute unrealized P&L.
+  // Plain async + a `refreshing` flag cleared in `finally` — guaranteed to reset even
+  // if calls overlap (a useMutation observer can otherwise leave isPending stuck).
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const refreshPrices = async () => {
+    if (refreshingRef.current) return; // ignore overlapping runs
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      const tickers = [...new Set((filled.data ?? []).map((t) => t.ticker))];
+      const entries = await Promise.all(
+        tickers.map(async (ticker) => {
+          try { return [ticker, (await api.quote(ticker)).price] as const; }
+          catch { return [ticker, null] as const; }
+        }),
+      );
+      const result = Object.fromEntries(entries) as Record<string, number | null>;
+      setPrices(result);
+      setPricesAt(new Date().toLocaleTimeString());
+      const missing = Object.values(result).filter((p) => p == null).length;
+      if (missing === Object.keys(result).length && missing > 0) {
+        toast('No prices returned — is FINNHUB_API_KEY set?', 'error');
+      } else if (missing > 0) {
+        toast(`Updated; ${missing} ticker(s) had no price`);
+      } else if (Object.keys(result).length > 0) {
+        toast('Prices updated');
+      }
+    } catch (err) {
+      toast((err as Error)?.message ?? 'Could not fetch prices', 'error');
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  };
+
+  // Auto-refresh prices once when the tab opens, as soon as positions have loaded.
+  // ActivePositions remounts each time the tab is activated, so this fires per visit.
+  const autoRefreshed = useRef(false);
+  const hasPositions = (filled.data?.length ?? 0) > 0;
+  useEffect(() => {
+    if (autoRefreshed.current || !hasPositions) return;
+    autoRefreshed.current = true;
+    refreshPrices();
+    // Fire once when positions first load; refreshPrices is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPositions]);
 
   const earningsWarnings = (filled.data ?? [])
     .map((t) => ({ t, days: earningsSoon(t.earningsDate) }))
@@ -202,11 +271,23 @@ export function ActivePositions() {
           — set an earnings date so you can be warned before the report.
         </div>
       )}
+      {(filled.data?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => refreshPrices()}
+            disabled={refreshing}
+            className="cursor-pointer rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {refreshing ? 'Fetching prices…' : 'Refresh prices'}
+          </button>
+          {pricesAt && <span className="text-xs text-slate-500 dark:text-slate-400">Estimated unrealized P&amp;L as of {pricesAt}</span>}
+        </div>
+      )}
       <table className="w-full text-sm">
         <HeaderRow showHeld />
         <tbody>
           {filled.data?.map((t) => (
-            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings showHeld onOpen={setViewing}>
+            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings showHeld livePrice={prices[t.ticker]} onOpen={setViewing}>
               <span className="flex items-center gap-1">
                 {t.dudFlagged && (
                   <IconButton label="Keep" onClick={() => keep.mutate(t.id)} className="bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100"><Save className="h-3.5 w-3.5" /></IconButton>
@@ -216,7 +297,7 @@ export function ActivePositions() {
               </span>
             </Row>
           ))}
-          {filled.data?.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
+          {filled.data?.length === 0 && <tr><td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
         </tbody>
       </table>
 

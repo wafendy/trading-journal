@@ -28,10 +28,14 @@ export const api = {
     fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<{ upeti: number; verifyDays: number }>),
   earnings: (ticker: string) =>
     fetch(`/api/earnings?ticker=${encodeURIComponent(ticker)}`).then(json<{ earningsDate: string | null }>),
+  // Bounded by a client-side timeout so a hung request can't wedge a batch fetch.
+  quote: (ticker: string) =>
+    fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { signal: AbortSignal.timeout(8000) }).then(json<{ price: number | null }>),
   create: (b: unknown) => post('/api/trades', b).then(json<TradeDTO>),
   patch: (id: number, b: unknown) => fetch(`/api/trades/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<TradeDTO>),
   fill: (id: number, fillDate: string, fillPrice: number, fillShares: number) => post(`/api/trades/${id}/fill`, { fillDate, fillPrice, fillShares }).then(json<TradeDTO>),
   cancel: (id: number) => post(`/api/trades/${id}/cancel`).then((r) => { if (!r.ok) throw new Error('cancel failed'); }),
+  remove: (id: number) => fetch(`/api/trades/${id}`, { method: 'DELETE' }).then((r) => { if (!r.ok) throw new Error('delete failed'); }),
   exit: (id: number, exitPrice: number, exitDate: string) => post(`/api/trades/${id}/exit`, { exitPrice, exitDate }).then(json<TradeDTO>),
   dudDecision: (id: number, b: unknown) => post(`/api/trades/${id}/dud-decision`, b).then(json<TradeDTO>),
 };
