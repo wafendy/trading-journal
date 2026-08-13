@@ -33,6 +33,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** Section heading above a group of fields. */
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">{children}</h3>;
+}
+
 /** Inline "has notes" indicator — a small document-with-lines glyph. */
 export function NoteIcon() {
   return (
@@ -71,7 +76,7 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
     : '—';
   const links = tickerLinks(trade.ticker);
   return (
-    <Modal title={`${trade.ticker} — trade details`} onClose={onClose}>
+    <Modal title={`${trade.ticker} — trade details`} onClose={onClose} size="xl">
       {links.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-2">
           {links.map(({ label, site, url }) => (
@@ -88,24 +93,47 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
           ))}
         </div>
       )}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-        <Field label="Status">{STATUS_LABEL[trade.status]}</Field>
-        <div />
-        <Field label="Entry signal"><SignalPill signal={trade.entrySignal} /></Field>
-        <Field label="Direction">{DIRECTION_LABELS[trade.direction]}</Field>
-        <Field label="Entry type">{ENTRY_TYPE_LABELS[trade.entryType]}</Field>
-        <div />
-        <Field label="Fill price">{money(trade.fillPrice)}</Field>
-        <Field label="Fill date">{trade.fillDate ?? '—'}</Field>
-        <Field label="SL / TP">{`${money(trade.slPrice)} / ${money(trade.tpPrice)}`}</Field>
-        <Field label="Earnings date">{trade.earningsDate ?? '—'}</Field>
-        <Field label="Shares">{String(trade.shares)}</Field>
-        <Field label="UPETI">{money(trade.upeti)}</Field>
-        <Field label="Exit price">{money(trade.exitPrice)}</Field>
-        <Field label="Exit date">{trade.exitDate ?? '—'}</Field>
-        <Field label="Realized P&L">{pnl}</Field>
-        <Field label="Risk / Reward">{rr != null ? `1 : ${rr.toFixed(2)}` : '—'}</Field>
-      </div>
+      {/* Initial trading plan — the parameters set when the plan was created. */}
+      <section className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <SectionTitle>Trading Plan</SectionTitle>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+          {/* Row 1 */}
+          <Field label="Direction">{DIRECTION_LABELS[trade.direction]}</Field>
+          <Field label="Entry type">{ENTRY_TYPE_LABELS[trade.entryType]}</Field>
+          <Field label="Entry signal"><SignalPill signal={trade.entrySignal} /></Field>
+          <div className="hidden sm:block" />
+          {/* Row 2 */}
+          <Field label="Entry price">{money(trade.entryPrice)}</Field>
+          <Field label="SL"><span className="text-red-600 dark:text-red-400">{money(trade.slPrice)}</span></Field>
+          <Field label="TP"><span className="text-green-600 dark:text-green-400">{money(trade.tpPrice)}</span></Field>
+          <Field label="Risk / Reward">{rr != null ? `1 : ${rr.toFixed(2)}` : '—'}</Field>
+          {/* Row 3 */}
+          <Field label="UPETI">{money(trade.upeti)}</Field>
+          <Field label="QTY">{String(trade.shares)}</Field>
+          <Field label="Earnings date">{trade.earningsDate ?? '—'}</Field>
+        </div>
+      </section>
+
+      {/* Execution & outcome — how the plan actually played out. */}
+      <section className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <SectionTitle>Execution &amp; Outcome</SectionTitle>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+          <Field label="Status">{STATUS_LABEL[trade.status]}</Field>
+          <Field label="Fill">
+            <div>{money(trade.fillPrice)}</div>
+            {trade.fillDate && <div className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{trade.fillDate}</div>}
+          </Field>
+          <Field label="Exit">
+            <div>{money(trade.exitPrice)}</div>
+            {trade.exitDate && <div className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{trade.exitDate}</div>}
+          </Field>
+          <Field label="Realized P&L">
+            {trade.realizedPnl == null ? pnl : (
+              <span className={trade.realizedPnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>{pnl}</span>
+            )}
+          </Field>
+        </div>
+      </section>
       <div className="mt-4">
         <div className="mb-1 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</div>
         {trade.notes ? (

@@ -32,10 +32,11 @@ export function ExitForm({ trade, onClose }: { trade: TradeDTO; onClose: () => v
   );
 }
 
-export function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+export function Modal({ title, children, onClose, size = 'md' }: { title: string; children: React.ReactNode; onClose: () => void; size?: 'md' | 'lg' | 'xl' }) {
+  const maxW = size === 'xl' ? 'max-w-3xl' : size === 'lg' ? 'max-w-xl' : 'max-w-md';
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-800 p-5 text-slate-900 dark:text-slate-100" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className={`w-full ${maxW} rounded-xl bg-white dark:bg-slate-800 p-5 text-slate-900 dark:text-slate-100`} onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-3">{title}</h2>
         {children}
       </div>
