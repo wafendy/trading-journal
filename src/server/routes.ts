@@ -7,10 +7,21 @@ import { deriveTrade, computePnl, computeShares, computeR } from '../lib/calc';
 import type { TradeRow, EntrySignal } from '../lib/types';
 import type { EarningsProvider } from './earnings';
 import type { QuoteProvider } from './quotes';
+import { BadRequestError, type ScreenshotStore } from './screenshots';
 
-export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; }
+export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; screenshots: ScreenshotStore; }
 
-export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote }: Deps): void {
+// A multipart upload value that behaves like a File (has size/type + arrayBuffer()).
+// Duck-typed so it works across realms (Node global File vs jsdom's in tests).
+type UploadedFile = { size: number; type: string; arrayBuffer(): Promise<ArrayBuffer> };
+function isUploadedFile(v: unknown): v is UploadedFile {
+  return typeof v === 'object' && v !== null
+    && typeof (v as UploadedFile).size === 'number'
+    && typeof (v as UploadedFile).type === 'string'
+    && typeof (v as UploadedFile).arrayBuffer === 'function';
+}
+
+export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote, screenshots }: Deps): void {
   const today = () => now().slice(0, 10);
   const dto = (row: TradeRow) => deriveTrade(row, today());
 
@@ -117,14 +128,49 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
     return c.json(dto(repo.fill(Number(c.req.param('id')), fillDate, fillPrice, fillShares ?? null)));
   });
 
-  api.post('/trades/:id/cancel', (c) => {
-    repo.cancel(Number(c.req.param('id')));
+  api.post('/trades/:id/cancel', async (c) => {
+    const id = Number(c.req.param('id'));
+    repo.cancel(id);
+    await screenshots.remove(id); // best-effort; remove() never throws for missing files
     return c.body(null, 204);
   });
 
   // Permanently delete an exited (history) trade.
-  api.delete('/trades/:id', (c) => {
-    repo.deleteExited(Number(c.req.param('id')));
+  api.delete('/trades/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    repo.deleteExited(id);
+    await screenshots.remove(id);
+    return c.body(null, 204);
+  });
+
+  const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
+
+  api.post('/trades/:id/screenshot', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!repo.getById(id)) throw new NotFoundError(`trade ${id} not found`);
+    const form = await c.req.parseBody();
+    const file = form['file'];
+    // Duck-typed rather than `instanceof File`: parseBody's File and the caller's File
+    // can come from different realms (e.g. jsdom in tests), which breaks instanceof.
+    if (!isUploadedFile(file)) throw new BadRequestError('file is required');
+    if (file.size > MAX_SCREENSHOT_BYTES) throw new BadRequestError('image exceeds 10MB');
+    const bytes = Buffer.from(await file.arrayBuffer());
+    await screenshots.save(id, bytes, file.type); // throws BadRequestError for a bad type
+    return c.body(null, 204);
+  });
+
+  api.get('/trades/:id/screenshot', async (c) => {
+    const id = Number(c.req.param('id'));
+    const bytes = await screenshots.read(id);
+    if (!bytes) return c.body(null, 404);
+    // Copy into a standalone ArrayBuffer and return a plain Response (avoids Hono's
+    // c.body Buffer/ArrayBufferLike overload friction).
+    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    return new Response(ab as ArrayBuffer, { status: 200, headers: { 'Content-Type': 'image/webp', 'Cache-Control': 'no-store' } });
+  });
+
+  api.delete('/trades/:id/screenshot', async (c) => {
+    await screenshots.remove(Number(c.req.param('id')));
     return c.body(null, 204);
   });
 
@@ -152,5 +198,6 @@ export function errorHandler(err: Error, c: import('hono').Context) {
   if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
   if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
   if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
+  if (err instanceof BadRequestError) return c.json({ error: err.message }, 400);
   return c.json({ error: 'internal error' }, 500);
 }

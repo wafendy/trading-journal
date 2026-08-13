@@ -2,6 +2,7 @@ node_modules
 trading.db
 trading.db-*
 backups/
+screenshots/
 dist
 .env
 *.tsbuildinfo

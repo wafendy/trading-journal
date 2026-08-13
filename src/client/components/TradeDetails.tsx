@@ -134,6 +134,7 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
           </Field>
         </div>
       </section>
+
       <div className="mt-4">
         <div className="mb-1 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</div>
         {trade.notes ? (

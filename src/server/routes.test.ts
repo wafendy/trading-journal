@@ -1,7 +1,15 @@
+// @vitest-environment node
+// Server routes handle real multipart binary uploads; jsdom's Blob corrupts binary
+// bytes (UTF-8 coercion), so run this suite in the Node environment like production.
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import sharp from 'sharp';
 import { createDb, migrateDb } from './db/index';
 import { createRepo } from './repository';
 import { buildApp } from './app';
+import { createScreenshotStore } from './screenshots';
 
 function setup() {
   const { db } = createDb(':memory:');
@@ -10,8 +18,10 @@ function setup() {
   let earnings: string | null = null;
   let quote: number | null = null;
   const repo = createRepo(db, () => clock);
-  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote });
-  return { app, repo, setClock: (c: string) => (clock = c), setEarnings: (d: string | null) => (earnings = d), setQuote: (p: number | null) => (quote = p) };
+  const shotsDir = mkdtempSync(join(tmpdir(), 'routes-shots-'));
+  const screenshots = createScreenshotStore(shotsDir);
+  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote, screenshots });
+  return { app, repo, shotsDir, setClock: (c: string) => (clock = c), setEarnings: (d: string | null) => (earnings = d), setQuote: (p: number | null) => (quote = p) };
 }
 
 const body = { ticker: 'aapl', upeti: 1000, entryPrice: 50, slPrice: 45, entryType: 'buy_limit', entrySignal: 'btb', earningsDate: '2026-08-25', verifyDays: 5 };
@@ -181,5 +191,64 @@ describe('GET /api/summary bySignal', () => {
     const s = await (await app.request('/api/summary?year=2026')).json();
     expect(s.bySignal).toHaveLength(1);
     expect(s.bySignal[0].signal).toBe('btb');
+  });
+});
+
+describe('screenshot routes', () => {
+  const pngFile = async () => {
+    const bytes = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    return new File([bytes], 'chart.png', { type: 'image/png' });
+  };
+  const upload = (app: ReturnType<typeof setup>['app'], id: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return app.request(`/api/trades/${id}/screenshot`, { method: 'POST', body: fd });
+  };
+  const create = async (app: ReturnType<typeof setup>['app']) =>
+    (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+
+  it('uploads, serves, and deletes a screenshot', async () => {
+    const { app } = setup();
+    const created = await create(app);
+
+    const up = await upload(app, created.id, await pngFile());
+    expect(up.status).toBe(204);
+
+    const get = await app.request(`/api/trades/${created.id}/screenshot`);
+    expect(get.status).toBe(200);
+    expect(get.headers.get('content-type')).toBe('image/webp');
+    expect(get.headers.get('cache-control')).toContain('no-store');
+
+    const del = await app.request(`/api/trades/${created.id}/screenshot`, { method: 'DELETE' });
+    expect(del.status).toBe(204);
+    expect((await app.request(`/api/trades/${created.id}/screenshot`)).status).toBe(404);
+  });
+
+  it('GET returns 404 when there is no screenshot', async () => {
+    const { app } = setup();
+    const created = await create(app);
+    expect((await app.request(`/api/trades/${created.id}/screenshot`)).status).toBe(404);
+  });
+
+  it('upload to a nonexistent trade returns 404', async () => {
+    const { app } = setup();
+    expect((await upload(app, 99999, await pngFile())).status).toBe(404);
+  });
+
+  it('rejects a non-image upload with 400', async () => {
+    const { app } = setup();
+    const created = await create(app);
+    const bad = new File([Buffer.from('not an image')], 'x.pdf', { type: 'application/pdf' });
+    expect((await upload(app, created.id, bad)).status).toBe(400);
+  });
+
+  it('deletes the screenshot file when the trade is deleted', async () => {
+    const { app } = setup();
+    const created = await create(app);
+    await app.request(`/api/trades/${created.id}/fill`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fillDate: '2026-08-04', fillPrice: 50 }) });
+    await app.request(`/api/trades/${created.id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 55, exitDate: '2026-08-20' }) });
+    await upload(app, created.id, await pngFile());
+    await app.request(`/api/trades/${created.id}`, { method: 'DELETE' });
+    expect((await app.request(`/api/trades/${created.id}/screenshot`)).status).toBe(404);
   });
 });

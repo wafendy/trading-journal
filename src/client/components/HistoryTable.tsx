@@ -4,6 +4,7 @@ import { api } from '../api';
 import { SignalPill } from './SignalPill';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { EditHistoryForm } from './EditHistoryForm';
+import { ChartModal } from './ChartModal';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
 import type { TradeDTO } from '../../lib/types';
@@ -11,6 +12,35 @@ import type { TradeDTO } from '../../lib/types';
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 // Off by default. Set VITE_ALLOW_HISTORY_EDIT=true to reveal per-row correction actions.
 const ALLOW_EDIT = import.meta.env.VITE_ALLOW_HISTORY_EDIT === 'true';
+
+/**
+ * Clickable mini chart cell: shows the trade's screenshot thumbnail if one exists,
+ * otherwise a dashed placeholder. Clicking either opens the Chart modal.
+ */
+function ChartThumb({ trade, version, onOpen }: { trade: TradeDTO; version: number; onOpen: (t: TradeDTO) => void }) {
+  const [hasImage, setHasImage] = useState(true); // onError flips to placeholder
+  // Re-show the <img> when the version changes (e.g. after an upload) so a newly
+  // added chart appears even if this row had fallen back to the placeholder.
+  useEffect(() => { setHasImage(true); }, [version]);
+  return (
+    <button
+      onClick={() => onOpen(trade)}
+      title="View / edit chart"
+      className="block h-[50px] w-[75px] cursor-pointer overflow-hidden rounded border border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-700"
+    >
+      {hasImage ? (
+        <img
+          src={api.screenshotUrl(trade.id, version)}
+          alt=""
+          onError={() => setHasImage(false)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="grid h-full w-full place-items-center text-[9px] uppercase tracking-wide text-slate-400 dark:text-slate-500">+ chart</span>
+      )}
+    </button>
+  );
+}
 
 export function HistoryTable({ year }: { year: number | null }) {
   const q = useInfiniteQuery({
@@ -23,6 +53,9 @@ export function HistoryTable({ year }: { year: number | null }) {
   const [selected, setSelected] = useState<TradeDTO | null>(null);
   const [editing, setEditing] = useState<TradeDTO | null>(null);
   const [deleting, setDeleting] = useState<TradeDTO | null>(null);
+  const [charting, setCharting] = useState<TradeDTO | null>(null);
+  // Bumped when the Chart modal closes so row thumbnails re-fetch after an edit.
+  const [thumbVersion, setThumbVersion] = useState(1);
   const qc = useQueryClient();
   const toast = useToast();
   const del = useMutation({
@@ -52,7 +85,7 @@ export function HistoryTable({ year }: { year: number | null }) {
       <table className="w-full text-sm">
         <thead><tr>
           <th className={th}>Ticker</th><th className={th}>Signal</th><th className={th}>Entry</th>
-          <th className={th}>UPETI</th><th className={th}>Exit</th><th className={th}>Realized P&L</th>{ALLOW_EDIT && <th className={th}>Actions</th>}
+          <th className={th}>UPETI</th><th className={th}>Exit</th><th className={th}>Realized P&L</th><th className={th}>Chart</th>{ALLOW_EDIT && <th className={th}>Actions</th>}
         </tr></thead>
         <tbody>
           {rows.map((t) => (
@@ -87,6 +120,9 @@ export function HistoryTable({ year }: { year: number | null }) {
               <td className={`px-3 py-2 font-semibold ${(t.realizedPnl ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {money(t.realizedPnl)} <span className="text-xs text-slate-500 dark:text-slate-400">({t.rMultiple != null ? `${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)}R` : '—'})</span>
               </td>
+              <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                <ChartThumb trade={t} version={thumbVersion} onOpen={setCharting} />
+              </td>
               {ALLOW_EDIT && (
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <span className="flex gap-2">
@@ -97,13 +133,14 @@ export function HistoryTable({ year }: { year: number | null }) {
               )}
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={ALLOW_EDIT ? 7 : 6} className="px-3 py-3 text-slate-500 dark:text-slate-500">No exited trades yet.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={ALLOW_EDIT ? 8 : 7} className="px-3 py-3 text-slate-500 dark:text-slate-500">No exited trades yet.</td></tr>}
           <tr ref={sentinel} />
         </tbody>
       </table>
       {q.isFetchingNextPage && <div className="py-3 text-center text-slate-500 dark:text-slate-500 text-sm">Loading…</div>}
       {selected && <TradeDetails trade={selected} onClose={() => setSelected(null)} />}
       {editing && <EditHistoryForm trade={editing} onClose={() => setEditing(null)} />}
+      {charting && <ChartModal trade={charting} onClose={() => { setCharting(null); setThumbVersion((v) => v + 1); }} />}
       {deleting && (
         <Modal title={`Delete ${deleting.ticker} trade?`} onClose={() => setDeleting(null)}>
           <p className="text-sm text-slate-600 dark:text-slate-300">

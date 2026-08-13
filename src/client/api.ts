@@ -38,4 +38,15 @@ export const api = {
   remove: (id: number) => fetch(`/api/trades/${id}`, { method: 'DELETE' }).then((r) => { if (!r.ok) throw new Error('delete failed'); }),
   exit: (id: number, exitPrice: number, exitDate: string) => post(`/api/trades/${id}/exit`, { exitPrice, exitDate }).then(json<TradeDTO>),
   dudDecision: (id: number, b: unknown) => post(`/api/trades/${id}/dud-decision`, b).then(json<TradeDTO>),
+  // Screenshot: URL carries a version param to bust the no-store image cache after edits.
+  screenshotUrl: (id: number, version: number) => `/api/trades/${id}/screenshot?v=${version}`,
+  uploadScreenshot: (id: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch(`/api/trades/${id}/screenshot`, { method: 'POST', body: fd })
+      .then((r) => { if (!r.ok) throw new Error('upload failed'); });
+  },
+  deleteScreenshot: (id: number) =>
+    fetch(`/api/trades/${id}/screenshot`, { method: 'DELETE' })
+      .then((r) => { if (!r.ok) throw new Error('delete failed'); }),
 };
