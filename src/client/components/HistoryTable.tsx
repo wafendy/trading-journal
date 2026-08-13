@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Pencil, X } from 'lucide-react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { SignalPill } from './SignalPill';
@@ -125,9 +126,9 @@ export function HistoryTable({ year }: { year: number | null }) {
               </td>
               {ALLOW_EDIT && (
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  <span className="flex gap-2">
-                    <button onClick={() => setEditing(t)} className="cursor-pointer rounded bg-slate-300 px-2 py-0.5 text-xs text-slate-900 dark:bg-slate-600 dark:text-slate-100">Edit</button>
-                    <button onClick={() => setDeleting(t)} className="cursor-pointer rounded bg-red-600 px-2 py-0.5 text-xs text-white">Delete</button>
+                  <span className="flex items-center gap-1">
+                    <button onClick={() => setEditing(t)} title="Edit" aria-label="Edit" className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded bg-slate-300 text-slate-900 dark:bg-slate-600 dark:text-slate-100"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setDeleting(t)} title="Delete" aria-label="Delete" className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded bg-red-600 text-white"><X className="h-3.5 w-3.5" /></button>
                   </span>
                 </td>
               )}

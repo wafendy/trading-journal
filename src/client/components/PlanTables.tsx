@@ -6,6 +6,7 @@ import { SignalPill } from './SignalPill';
 import { ExitForm, Modal } from './ExitForm';
 import { FillModal } from './FillModal';
 import { EditPositionForm } from './EditPositionForm';
+import { EditPlanForm } from './EditPlanForm';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { useToast } from './Toast';
 import { computePnl } from '../../lib/calc';
@@ -141,6 +142,7 @@ export function PendingOrders() {
   const pending = useQuery({ queryKey: ['trades', 'pending'], queryFn: () => api.open('pending') });
   const [viewing, setViewing] = useState<TradeDTO | null>(null);
   const [filling, setFilling] = useState<TradeDTO | null>(null);
+  const [editing, setEditing] = useState<TradeDTO | null>(null);
   const [cancelling, setCancelling] = useState<TradeDTO | null>(null);
   const inval = () => qc.invalidateQueries();
 
@@ -159,6 +161,7 @@ export function PendingOrders() {
             <Row key={t.id} t={t} onOpen={setViewing}>
               <span className="flex gap-1">
                 <IconButton label="Mark filled" onClick={() => setFilling(t)} className="bg-emerald-600 text-white"><Check className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Edit" onClick={() => setEditing(t)} className="bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100"><Pencil className="h-3.5 w-3.5" /></IconButton>
                 <IconButton label="Cancel" onClick={() => setCancelling(t)} className="bg-red-600 text-white"><X className="h-3.5 w-3.5" /></IconButton>
               </span>
             </Row>
@@ -168,6 +171,7 @@ export function PendingOrders() {
       </table>
       {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
       {filling && <FillModal trade={filling} onClose={() => setFilling(null)} />}
+      {editing && <EditPlanForm trade={editing} onClose={() => setEditing(null)} />}
       {cancelling && (
         <Modal title={`Cancel ${cancelling.ticker} trading plan?`} onClose={() => setCancelling(null)}>
           <p className="text-sm text-slate-600 dark:text-slate-300">This permanently deletes the trading plan. This cannot be undone.</p>

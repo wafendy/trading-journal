@@ -20,7 +20,7 @@ const TICKER_LINKS: { label: string; site: string; template: string }[] = [
 
 function tickerLinks(ticker: string): { label: string; site: string; url: string }[] {
   const sym = encodeURIComponent(ticker.toUpperCase());
-  return TICKER_LINKS.map((l) => ({ label: l.label, site: l.site, url: l.template.replace(/\$?\{TICKER\}/g, sym) }));
+  return TICKER_LINKS.map((l) => ({ label: l.label, site: l.site, url: l.template.replace(/\{\{TICKER\}\}/g, sym) }));
 }
 
 /** One label/value cell in the details grid. */
