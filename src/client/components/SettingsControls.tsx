@@ -21,7 +21,7 @@ export function SettingsControls() {
   const input = 'w-24 rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1 text-sm';
   return (
     <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-      <label className="flex items-center gap-1">UPETI $
+      <label className="flex items-center gap-1">Upet1 $
         <input type="number" step="any" value={upeti} onChange={(e) => setUpeti(e.target.value)}
           onBlur={() => { const v = Number(upeti); if (v > 0 && v !== settings.data?.upeti) save.mutate({ upeti: v }); }}
           className={input} />

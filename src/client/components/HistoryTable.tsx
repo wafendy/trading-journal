@@ -86,7 +86,7 @@ export function HistoryTable({ year }: { year: number | null }) {
       <table className="w-full text-sm">
         <thead><tr>
           <th className={th}>Ticker</th><th className={th}>Signal</th><th className={th}>Entry</th>
-          <th className={th}>UPETI</th><th className={th}>Exit</th><th className={th}>Realized P&L</th><th className={th}>Chart</th>{ALLOW_EDIT && <th className={th}>Actions</th>}
+          <th className={th}>Upet1</th><th className={th}>Exit</th><th className={th}>Realized P&L</th><th className={th}>Chart</th>{ALLOW_EDIT && <th className={th}>Actions</th>}
         </tr></thead>
         <tbody>
           {rows.map((t) => (

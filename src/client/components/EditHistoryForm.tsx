@@ -30,7 +30,7 @@ export function EditHistoryForm({ trade, onClose }: { trade: TradeDTO; onClose: 
   const posErr = (s: string, label: string) => (s === '' || !(num(s) > 0) ? `${label} must be a positive number` : '');
   const entryErr = posErr(entryPrice, 'Entry price');
   const slErr = posErr(slPrice, 'SL price');
-  const upetiErr = posErr(upeti, 'UPETI');
+  const upetiErr = posErr(upeti, 'Upet1');
   const fillPriceErr = fillPrice !== '' && !(num(fillPrice) > 0) ? 'Fill price must be positive' : '';
   const fillSharesErr = fillShares !== '' && !(Number.isInteger(num(fillShares)) && num(fillShares) > 0) ? 'Quantity must be a positive whole number' : '';
   const fillDateErr = ISO.test(fillDate) ? '' : 'Fill date is required (YYYY-MM-DD)';
@@ -78,7 +78,7 @@ export function EditHistoryForm({ trade, onClose }: { trade: TradeDTO; onClose: 
           <input type="number" step="any" value={slPrice} onChange={(e) => setSlPrice(e.target.value)} className={inputCls(slErr)} />
           {err(slErr)}
         </label>
-        <label className="block">UPETI
+        <label className="block">Upet1
           <input type="number" step="any" value={upeti} onChange={(e) => setUpeti(e.target.value)} className={inputCls(upetiErr)} />
           {err(upetiErr)}
         </label>

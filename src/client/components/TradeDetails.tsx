@@ -108,7 +108,7 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
           <Field label="TP"><span className="text-green-600 dark:text-green-400">{money(trade.tpPrice)}</span></Field>
           <Field label="Risk / Reward">{rr != null ? `1 : ${rr.toFixed(2)}` : '—'}</Field>
           {/* Row 3 */}
-          <Field label="UPETI">{money(trade.upeti)}</Field>
+          <Field label="Upet1">{money(trade.upeti)}</Field>
           <Field label="QTY">{String(trade.shares)}</Field>
           <Field label="Earnings date">{trade.earningsDate ?? '—'}</Field>
         </div>
