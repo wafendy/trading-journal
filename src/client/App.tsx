@@ -14,7 +14,7 @@ import { SettingsControls } from './components/SettingsControls';
 type Tab = 'pending' | 'active' | 'history';
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('pending');
+  const [tab, setTab] = useState<Tab>('active');
   const [formOpen, setFormOpen] = useState(false);
 
   // Counts for the tab badges (shared query keys — deduped with the tables).
