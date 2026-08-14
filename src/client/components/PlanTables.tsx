@@ -12,6 +12,12 @@ import { useToast } from './Toast';
 import { computePnl } from '../../lib/calc';
 import type { TradeDTO } from '../../lib/types';
 
+// Live-price cache, keyed by ticker. Module-level so it survives tab remounts.
+// TTL configurable via VITE_PRICE_CACHE_MINUTES (default 15); refresh serves fresh
+// entries from cache instead of hitting the API.
+const PRICE_CACHE_MS = (Number(import.meta.env.VITE_PRICE_CACHE_MINUTES) || 15) * 60_000;
+const priceCache = new Map<string, { price: number | null; at: number }>();
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 const th = 'px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400';
@@ -214,22 +220,33 @@ export function ActivePositions() {
     setRefreshing(true);
     try {
       const tickers = [...new Set((filled.data ?? []).map((t) => t.ticker))];
+      const fresh = Date.now() - PRICE_CACHE_MS;
+      let fetched = 0; // live API calls actually made this run
       const entries = await Promise.all(
         tickers.map(async (ticker) => {
-          try { return [ticker, (await api.quote(ticker)).price] as const; }
-          catch { return [ticker, null] as const; }
+          const hit = priceCache.get(ticker);
+          if (hit && hit.at >= fresh) return [ticker, hit.price] as const; // cached — no API call
+          fetched++;
+          try {
+            const price = (await api.quote(ticker)).price;
+            priceCache.set(ticker, { price, at: Date.now() });
+            return [ticker, price] as const;
+          } catch { return [ticker, hit?.price ?? null] as const; }
         }),
       );
       const result = Object.fromEntries(entries) as Record<string, number | null>;
       setPrices(result);
       setPricesAt(new Date().toLocaleTimeString());
-      const missing = Object.values(result).filter((p) => p == null).length;
-      if (missing === Object.keys(result).length && missing > 0) {
-        toast('No prices returned — is FINNHUB_API_KEY set?', 'error');
-      } else if (missing > 0) {
-        toast(`Updated; ${missing} ticker(s) had no price`);
-      } else if (Object.keys(result).length > 0) {
-        toast('Prices updated');
+      // Only toast when we actually hit the API; a fully-cached refresh stays silent.
+      if (fetched > 0) {
+        const missing = Object.values(result).filter((p) => p == null).length;
+        if (missing === Object.keys(result).length) {
+          toast('No prices returned — is FINNHUB_API_KEY set?', 'error');
+        } else if (missing > 0) {
+          toast(`Updated; ${missing} ticker(s) had no price`);
+        } else {
+          toast('Prices updated');
+        }
       }
     } catch (err) {
       toast((err as Error)?.message ?? 'Could not fetch prices', 'error');
