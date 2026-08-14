@@ -135,7 +135,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
         {/* Row 1 */}
         <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} onBlur={lookupEarnings} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupEarnings(); entryPriceRef.current?.focus(); } }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         <label>Earnings date<input type="date" min={today} value={earningsDate} onChange={(ev) => { setEarningsEdited(true); setEarningsStatus('idle'); setEarningsDate(rollForward90(ev.target.value)); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${earningsDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{earningsDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{earningsDateError}</span>}{!earningsDateError && earningsStatus === 'loading' && <span className="mt-1 block text-xs text-slate-400">Looking up earnings…</span>}{!earningsDateError && earningsStatus === 'fetched' && <span className="mt-1 block text-xs text-slate-400">Fetched from Finnhub</span>}{!earningsDateError && earningsStatus === 'notfound' && <span className="mt-1 block text-xs text-slate-400">No earnings date found — enter manually</span>}</label>
-        <div />
+        <label>UPETI<input type="number" step="any" value={upeti} onChange={(e) => setUpeti(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         {/* Row 2 */}
         <label>Direction<select value={direction} onChange={(e) => {
           const d = e.target.value as TradeDirection;
