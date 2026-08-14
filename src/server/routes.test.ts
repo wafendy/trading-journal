@@ -10,8 +10,10 @@ import { createDb, migrateDb } from './db/index';
 import { createRepo } from './repository';
 import { buildApp } from './app';
 import { createScreenshotStore } from './screenshots';
+import { ConflictError } from './repository';
+import type { T1moCapturer, CaptureResult } from './t1moCapture';
 
-function setup() {
+function setup(t1moCapturer: T1moCapturer | null = null) {
   const { db } = createDb(':memory:');
   migrateDb(db);
   let clock = '2026-08-10T00:00:00Z';
@@ -20,7 +22,7 @@ function setup() {
   const repo = createRepo(db, () => clock);
   const shotsDir = mkdtempSync(join(tmpdir(), 'routes-shots-'));
   const screenshots = createScreenshotStore(shotsDir);
-  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote, screenshots });
+  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote, screenshots, t1moCapturer });
   return { app, repo, shotsDir, setClock: (c: string) => (clock = c), setEarnings: (d: string | null) => (earnings = d), setQuote: (p: number | null) => (quote = p) };
 }
 
@@ -250,5 +252,86 @@ describe('screenshot routes', () => {
     await upload(app, created.id, await pngFile());
     await app.request(`/api/trades/${created.id}`, { method: 'DELETE' });
     expect((await app.request(`/api/trades/${created.id}/screenshot`)).status).toBe(404);
+  });
+});
+
+describe('T1mo capture route', () => {
+  const png = async () => sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+  const okCapturer = (calls: string[][] = []): T1moCapturer => ({
+    cacheMs: 15 * 60_000,
+    configError: () => null,
+    capture: async (tickers) => {
+      calls.push(tickers);
+      const out: Record<string, CaptureResult> = {};
+      for (const t of tickers) out[t.toUpperCase()] = { signal: await png(), pixel: await png() };
+      return out;
+    },
+  });
+  const fill = async (app: ReturnType<typeof setup>['app'], ticker: string) => {
+    const created = await (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, ticker }) })).json();
+    await app.request(`/api/trades/${created.id}/fill`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fillDate: '2026-08-04', fillPrice: 50 }) });
+    return created.id as number;
+  };
+
+  it('400 when the feature is disabled (no capturer)', async () => {
+    const { app } = setup(null);
+    expect((await app.request('/api/t1mo/capture', { method: 'POST' })).status).toBe(400);
+  });
+
+  it('400 when misconfigured', async () => {
+    const { app } = setup({ cacheMs: 900000, configError: () => 'T1MO_SIGNAL_CLIP must be "x,y,w,h"', capture: async () => ({}) });
+    expect((await app.request('/api/t1mo/capture', { method: 'POST' })).status).toBe(400);
+  });
+
+  it('captures stale filled tickers, saves both variants, serves them, reports counts', async () => {
+    const calls: string[][] = [];
+    const { app } = setup(okCapturer(calls));
+    const id = await fill(app, 'aapl');
+    const res = await app.request('/api/t1mo/capture', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const jsonRes = await res.json();
+    expect(jsonRes.captured).toBe(1);
+    expect(calls[0]).toEqual(['AAPL']);
+    const sig = await app.request(`/api/trades/${id}/screenshot?variant=signal`);
+    expect(sig.status).toBe(200);
+    expect(sig.headers.get('content-type')).toBe('image/webp');
+    const pix = await app.request(`/api/trades/${id}/screenshot?variant=pixel`);
+    expect(pix.status).toBe(200);
+  });
+
+  it('skips fresh tickers on a second run (no re-capture)', async () => {
+    const calls: string[][] = [];
+    const { app } = setup(okCapturer(calls));
+    await fill(app, 'aapl');
+    await app.request('/api/t1mo/capture', { method: 'POST' });
+    const second = await (await app.request('/api/t1mo/capture', { method: 'POST' })).json();
+    expect(second.captured).toBe(0);
+    expect(second.skipped).toBe(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reports ok:false when the capturer returns an error for a ticker', async () => {
+    const errCapturer: T1moCapturer = { cacheMs: 900000, configError: () => null, capture: async (t) => Object.fromEntries(t.map((x) => [x.toUpperCase(), { error: 'boom' }])) };
+    const { app } = setup(errCapturer);
+    await fill(app, 'aapl');
+    const j = await (await app.request('/api/t1mo/capture', { method: 'POST' })).json();
+    expect(j.failed).toBe(1);
+    expect(j.results[0]).toMatchObject({ ticker: 'AAPL', ok: false });
+  });
+
+  it('409 when a capture is already in progress', async () => {
+    const busy: T1moCapturer = { cacheMs: 900000, configError: () => null, capture: async () => { throw new ConflictError('busy'); } };
+    const { app } = setup(busy);
+    await fill(app, 'aapl');
+    expect((await app.request('/api/t1mo/capture', { method: 'POST' })).status).toBe(409);
+  });
+
+  it('deletes both variants when the trade is exited', async () => {
+    const { app } = setup(okCapturer());
+    const id = await fill(app, 'aapl');
+    await app.request('/api/t1mo/capture', { method: 'POST' });
+    await app.request(`/api/trades/${id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 55, exitDate: '2026-08-20' }) });
+    expect((await app.request(`/api/trades/${id}/screenshot?variant=signal`)).status).toBe(404);
+    expect((await app.request(`/api/trades/${id}/screenshot?variant=pixel`)).status).toBe(404);
   });
 });

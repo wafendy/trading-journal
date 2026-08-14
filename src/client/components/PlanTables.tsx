@@ -19,6 +19,9 @@ import type { TradeDTO } from '../../lib/types';
 const PRICE_CACHE_MS = (Number(import.meta.env.VITE_PRICE_CACHE_MINUTES) || 15) * 60_000;
 const priceCache = new Map<string, { price: number | null; at: number }>();
 
+// T1mo signal capture feature flag (client). Server route is independently gated.
+const T1MO_CAPTURE = import.meta.env.VITE_T1MO_CAPTURE === 'true';
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const money = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 const th = 'px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400';
@@ -59,7 +62,25 @@ function IconButton({ label, onClick, className, children }: { label: string; on
   );
 }
 
-function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; showHeld?: boolean; livePrice?: number | null; onOpen?: (t: TradeDTO) => void }) {
+// A single ≤50×75 auto-captured T1mo thumbnail; placeholder until captured, click to enlarge.
+function T1moThumb({ tradeId, variant, version, onOpen }: { tradeId: number; variant: 'signal' | 'pixel'; version: number; onOpen: (url: string) => void }) {
+  const [ok, setOk] = useState(true);
+  useEffect(() => { setOk(true); }, [version]);
+  const url = api.t1moThumbUrl(tradeId, variant, version);
+  if (!ok) return <div className="grid h-[50px] w-[75px] place-items-center rounded border border-dashed border-slate-300 text-[9px] uppercase text-slate-400 dark:border-slate-600 dark:text-slate-500">{variant}</div>;
+  return (
+    <img
+      src={url}
+      alt={variant}
+      title={variant}
+      onError={() => setOk(false)}
+      onClick={(e) => { e.stopPropagation(); onOpen(url); }}
+      className="max-h-[50px] max-w-[75px] cursor-zoom-in rounded border border-slate-200 object-contain dark:border-slate-700"
+    />
+  );
+}
+
+function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, showT1mo, t1moVersion, onLightbox, onOpen }: { t: TradeDTO; children: React.ReactNode; flagged?: boolean; warnEarnings?: boolean; showHeld?: boolean; livePrice?: number | null; showT1mo?: boolean; t1moVersion?: number; onLightbox?: (url: string) => void; onOpen?: (t: TradeDTO) => void }) {
   const held = showHeld ? daysSince(t.fillDate) : null;
   // Estimated unrealized P&L from a manually-fetched live price (not persisted).
   const costBasis = t.fillPrice ?? t.entryPrice;
@@ -131,15 +152,23 @@ function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, onOpen }
         )}
       </td>
       {showHeld && <td className="px-3 py-2">{held === null ? '—' : held}</td>}
+      {showT1mo && (
+        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col gap-1">
+            <T1moThumb tradeId={t.id} variant="signal" version={t1moVersion ?? 1} onOpen={onLightbox ?? (() => {})} />
+            <T1moThumb tradeId={t.id} variant="pixel" version={t1moVersion ?? 1} onOpen={onLightbox ?? (() => {})} />
+          </div>
+        </td>
+      )}
       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>{children}</td>
     </tr>
   );
 }
 
-function HeaderRow({ showHeld }: { showHeld?: boolean }) {
+function HeaderRow({ showHeld, showT1mo }: { showHeld?: boolean; showT1mo?: boolean }) {
   return (
     <thead><tr>
-      <th className={th}>Ticker</th><th className={th}>Signal</th><th className={th}>Entry</th>{showHeld && <th className={th}>Unrealized P&L</th>}<th className={th}>Earnings</th>{showHeld && <th className={th}>Held</th>}<th className={th}>Actions</th>
+      <th className={th}>Ticker</th><th className={th}>Signal</th><th className={th}>Entry</th>{showHeld && <th className={th}>Unrealized P&L</th>}<th className={th}>Earnings</th>{showHeld && <th className={th}>Held</th>}{showT1mo && <th className={th}>T1mo</th>}<th className={th}>Actions</th>
     </tr></thead>
   );
 }
@@ -258,6 +287,27 @@ export function ActivePositions() {
     }
   };
 
+  // On-demand T1mo signal/pixel capture (drives Vivaldi server-side). Single-flight.
+  const [t1moVersion, setT1moVersion] = useState(1);
+  const [t1moBusy, setT1moBusy] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const t1moBusyRef = useRef(false);
+  const refreshT1mo = async () => {
+    if (t1moBusyRef.current) return;
+    t1moBusyRef.current = true;
+    setT1moBusy(true);
+    try {
+      const r = await api.captureT1mo();
+      setT1moVersion((v) => v + 1);
+      toast(`T1mo: captured ${r.captured}${r.failed ? ` · ${r.failed} failed` : ''}${r.skipped ? ` · ${r.skipped} fresh` : ''}`, r.failed && !r.captured ? 'error' : undefined);
+    } catch (err) {
+      toast((err as Error)?.message ?? 'T1mo capture failed', 'error');
+    } finally {
+      t1moBusyRef.current = false;
+      setT1moBusy(false);
+    }
+  };
+
   // Auto-refresh prices once when the tab opens, as soon as positions have loaded.
   // ActivePositions remounts each time the tab is activated, so this fires per visit.
   const autoRefreshed = useRef(false);
@@ -303,14 +353,23 @@ export function ActivePositions() {
           >
             {refreshing ? 'Fetching prices…' : 'Refresh prices'}
           </button>
+          {T1MO_CAPTURE && (
+            <button
+              onClick={() => refreshT1mo()}
+              disabled={t1moBusy}
+              className="cursor-pointer rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t1moBusy ? 'Capturing T1mo…' : 'Refresh T1mo Signal'}
+            </button>
+          )}
           {pricesAt && <span className="text-xs text-slate-500 dark:text-slate-400">Estimated unrealized P&amp;L as of {pricesAt}</span>}
         </div>
       )}
       <table className="w-full text-sm">
-        <HeaderRow showHeld />
+        <HeaderRow showHeld showT1mo={T1MO_CAPTURE} />
         <tbody>
           {filled.data?.map((t) => (
-            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings showHeld livePrice={prices[t.ticker]} onOpen={setViewing}>
+            <Row key={t.id} t={t} flagged={t.dudFlagged} warnEarnings showHeld livePrice={prices[t.ticker]} showT1mo={T1MO_CAPTURE} t1moVersion={t1moVersion} onLightbox={setLightbox} onOpen={setViewing}>
               <span className="flex items-center gap-1">
                 {t.dudFlagged && (
                   <IconButton label="Keep" onClick={() => keep.mutate(t.id)} className="bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-slate-100"><Save className="h-3.5 w-3.5" /></IconButton>
@@ -320,13 +379,18 @@ export function ActivePositions() {
               </span>
             </Row>
           ))}
-          {filled.data?.length === 0 && <tr><td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
+          {filled.data?.length === 0 && <tr><td colSpan={T1MO_CAPTURE ? 8 : 7} className="px-3 py-3 text-slate-500 dark:text-slate-500">No active positions</td></tr>}
         </tbody>
       </table>
 
       {exiting && <ExitForm trade={exiting} onClose={() => setExiting(null)} />}
       {editing && <EditPositionForm trade={editing} onClose={() => setEditing(null)} />}
       {viewing && <TradeDetails trade={viewing} onClose={() => setViewing(null)} />}
+      {lightbox && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/80 p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="T1mo" className="max-h-[90vh] max-w-[90vw] rounded" />
+        </div>
+      )}
     </section>
   );
 }

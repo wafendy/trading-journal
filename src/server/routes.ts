@@ -8,8 +8,9 @@ import type { TradeRow, EntrySignal } from '../lib/types';
 import type { EarningsProvider } from './earnings';
 import type { QuoteProvider } from './quotes';
 import { BadRequestError, type ScreenshotStore } from './screenshots';
+import type { T1moCapturer, CaptureResult } from './t1moCapture';
 
-export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; screenshots: ScreenshotStore; }
+export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; screenshots: ScreenshotStore; t1moCapturer: T1moCapturer | null; }
 
 // A multipart upload value that behaves like a File (has size/type + arrayBuffer()).
 // Duck-typed so it works across realms (Node global File vs jsdom's in tests).
@@ -21,7 +22,7 @@ function isUploadedFile(v: unknown): v is UploadedFile {
     && typeof (v as UploadedFile).arrayBuffer === 'function';
 }
 
-export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote, screenshots }: Deps): void {
+export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote, screenshots, t1moCapturer }: Deps): void {
   const today = () => now().slice(0, 10);
   const dto = (row: TradeRow) => deriveTrade(row, today());
 
@@ -161,7 +162,10 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
 
   api.get('/trades/:id/screenshot', async (c) => {
     const id = Number(c.req.param('id'));
-    const bytes = await screenshots.read(id);
+    const variant = c.req.query('variant');
+    const bytes = variant === 'signal' || variant === 'pixel'
+      ? await screenshots.readVariant(id, variant)
+      : await screenshots.read(id);
     if (!bytes) return c.body(null, 404);
     // Copy into a standalone ArrayBuffer and return a plain Response (avoids Hono's
     // c.body Buffer/ArrayBufferLike overload friction).
@@ -174,16 +178,57 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
     return c.body(null, 204);
   });
 
+  // On-demand T1mo signal/pixel capture for all active positions (stale ones only).
+  api.post('/t1mo/capture', async (c) => {
+    if (!t1moCapturer) return c.json({ error: 'T1mo capture is disabled (set VITE_T1MO_CAPTURE=true)' }, 400);
+    const cfgErr = t1moCapturer.configError();
+    if (cfgErr) return c.json({ error: cfgErr }, 400);
+
+    const filled = repo.list('filled');
+    const cutoff = t1moCapturer.cacheMs;
+    const stale: typeof filled = [];
+    for (const t of filled) {
+      const sAge = await screenshots.ageMs(t.id, 'signal');
+      const pAge = await screenshots.ageMs(t.id, 'pixel');
+      if (sAge == null || pAge == null || sAge > cutoff || pAge > cutoff) stale.push(t);
+    }
+    const tickers = [...new Set(stale.map((t) => t.ticker.toUpperCase()))];
+    const captured: Record<string, CaptureResult> = tickers.length ? await t1moCapturer.capture(tickers) : {};
+
+    const results: { ticker: string; ok: boolean; error?: string }[] = [];
+    let ok = 0, failed = 0;
+    for (const t of stale) {
+      const r = captured[t.ticker.toUpperCase()];
+      if (!r) { failed++; results.push({ ticker: t.ticker, ok: false, error: 'no result' }); continue; }
+      if ('error' in r) { failed++; results.push({ ticker: t.ticker, ok: false, error: r.error }); continue; }
+      await screenshots.saveVariant(t.id, 'signal', r.signal, 'image/png');
+      await screenshots.saveVariant(t.id, 'pixel', r.pixel, 'image/png');
+      ok++; results.push({ ticker: t.ticker, ok: true });
+    }
+    return c.json({ results, captured: ok, failed, skipped: filled.length - stale.length });
+  });
+
+  // Exiting a position discards its auto-captured T1mo snapshots (best-effort, idempotent).
+  const removeT1moVariants = async (id: number) => {
+    await screenshots.removeVariant(id, 'signal');
+    await screenshots.removeVariant(id, 'pixel');
+  };
+
   api.post('/trades/:id/exit', async (c) => {
     const { exitPrice, exitDate } = exitSchema.parse(await c.req.json());
-    return c.json(dto(repo.exit(Number(c.req.param('id')), exitPrice, exitDate)));
+    const id = Number(c.req.param('id'));
+    const out = dto(repo.exit(id, exitPrice, exitDate));
+    await removeT1moVariants(id);
+    return c.json(out);
   });
 
   api.post('/trades/:id/dud-decision', async (c) => {
     const input = dudDecisionSchema.parse(await c.req.json());
     const id = Number(c.req.param('id'));
     if (input.decision === 'keep') return c.json(dto(repo.dudKeep(id)));
-    return c.json(dto(repo.exit(id, input.exitPrice, input.exitDate)));
+    const out = dto(repo.exit(id, input.exitPrice, input.exitDate));
+    await removeT1moVariants(id);
+    return c.json(out);
   });
 
   api.get('/settings', (c) => c.json(repo.getSettings()));

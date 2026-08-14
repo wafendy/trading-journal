@@ -28,6 +28,10 @@ export const api = {
     fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<{ upeti: number; verifyDays: number }>),
   earnings: (ticker: string) =>
     fetch(`/api/earnings?ticker=${encodeURIComponent(ticker)}`).then(json<{ earningsDate: string | null }>),
+  t1moThumbUrl: (id: number, variant: 'signal' | 'pixel', version: number) => `/api/trades/${id}/screenshot?variant=${variant}&v=${version}`,
+  captureT1mo: () =>
+    fetch('/api/t1mo/capture', { method: 'POST' })
+      .then((r) => r.json() as Promise<{ results: { ticker: string; ok: boolean; error?: string }[]; captured: number; failed: number; skipped: number }>),
   // Bounded by a client-side timeout so a hung request can't wedge a batch fetch.
   quote: (ticker: string) =>
     fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { signal: AbortSignal.timeout(8000) }).then(json<{ price: number | null }>),

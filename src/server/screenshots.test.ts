@@ -47,3 +47,39 @@ describe('ScreenshotStore', () => {
     expect(existsSync(join(nested, '3.webp'))).toBe(true);
   });
 });
+
+describe('ScreenshotStore variants', () => {
+  let dir: string;
+  let store: ScreenshotStore;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'shots-v-')); store = createScreenshotStore(dir); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+
+  it('saves and reads signal/pixel variants as WebP without touching the base chart', async () => {
+    await store.saveVariant(5, 'signal', await pngBytes(), 'image/png');
+    await store.saveVariant(5, 'pixel', await pngBytes(), 'image/png');
+    expect(existsSync(join(dir, '5-signal.webp'))).toBe(true);
+    expect(existsSync(join(dir, '5-pixel.webp'))).toBe(true);
+    expect(existsSync(join(dir, '5.webp'))).toBe(false); // base chart untouched
+    const sig = await store.readVariant(5, 'signal');
+    expect((await sharp(sig as Buffer).metadata()).format).toBe('webp');
+  });
+
+  it('readVariant returns null when missing; ageMs null when missing, small when present', async () => {
+    expect(await store.readVariant(9, 'signal')).toBeNull();
+    expect(await store.ageMs(9, 'signal')).toBeNull();
+    await store.saveVariant(9, 'signal', await pngBytes(), 'image/png');
+    const age = await store.ageMs(9, 'signal');
+    expect(age).not.toBeNull();
+    expect(age as number).toBeGreaterThanOrEqual(0);
+    expect(age as number).toBeLessThan(60_000);
+  });
+
+  it('removeVariant deletes one variant, is idempotent, leaves the other', async () => {
+    await store.saveVariant(3, 'signal', await pngBytes(), 'image/png');
+    await store.saveVariant(3, 'pixel', await pngBytes(), 'image/png');
+    await store.removeVariant(3, 'signal');
+    expect(await store.readVariant(3, 'signal')).toBeNull();
+    expect(await store.readVariant(3, 'pixel')).not.toBeNull();
+    await store.removeVariant(3, 'signal'); // idempotent
+  });
+});

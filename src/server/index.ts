@@ -6,6 +6,7 @@ import { buildApp } from './app';
 import { createFinnhubProvider } from './earnings';
 import { createFinnhubQuoteProvider } from './quotes';
 import { createScreenshotStore } from './screenshots';
+import { createPlaywrightCapturer } from './t1moCapture';
 
 const { db } = createDb(process.env.DB_PATH ?? './trading.db');
 migrateDb(db);
@@ -13,7 +14,8 @@ const repo = createRepo(db, () => new Date().toISOString());
 const getNextEarnings = createFinnhubProvider({ apiKey: process.env.FINNHUB_API_KEY });
 const getQuote = createFinnhubQuoteProvider({ apiKey: process.env.FINNHUB_API_KEY });
 const screenshots = createScreenshotStore(process.env.SCREENSHOTS_DIR ?? './screenshots');
-const app = buildApp({ repo, now: () => new Date().toISOString(), getNextEarnings, getQuote, screenshots });
+const t1moCapturer = createPlaywrightCapturer(process.env);
+const app = buildApp({ repo, now: () => new Date().toISOString(), getNextEarnings, getQuote, screenshots, t1moCapturer });
 
 if (process.env.NODE_ENV === 'production') {
   app.use('/*', serveStatic({ root: './dist' }));
