@@ -10,6 +10,7 @@ import { EditPlanForm } from './EditPlanForm';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { useToast } from './Toast';
 import { computePnl } from '../../lib/calc';
+import { T1moLink } from './T1moLink';
 import type { TradeDTO } from '../../lib/types';
 
 // Live-price cache, keyed by ticker. Module-level so it survives tab remounts.
@@ -83,6 +84,7 @@ function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, onOpen }
       title={rowTitle}
     >
       <td className="px-3 py-2 font-medium">
+        <T1moLink ticker={t.ticker} />
         {t.ticker}
         {t.direction === 'short' && (
           <span className="ml-1.5 rounded bg-rose-200 px-1 py-0.5 text-[10px] font-semibold text-rose-900 dark:bg-rose-500/30 dark:text-rose-200" title="Short position">SHORT</span>

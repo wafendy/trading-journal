@@ -6,6 +6,7 @@ import { SignalPill } from './SignalPill';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { EditHistoryForm } from './EditHistoryForm';
 import { ChartModal } from './ChartModal';
+import { T1moLink } from './T1moLink';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
 import type { TradeDTO } from '../../lib/types';
@@ -96,6 +97,7 @@ export function HistoryTable({ year }: { year: number | null }) {
               className="cursor-pointer border-t border-slate-200 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800/60"
             >
               <td className="px-3 py-2 font-medium">
+                <T1moLink ticker={t.ticker} />
                 {t.ticker}
                 {t.direction === 'short' && (
                   <span className="ml-1.5 rounded bg-rose-200 px-1 py-0.5 text-[10px] font-semibold text-rose-900 dark:bg-rose-500/30 dark:text-rose-200" title="Short position">SHORT</span>
