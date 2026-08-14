@@ -10,6 +10,7 @@ import { EditPlanForm } from './EditPlanForm';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { useToast } from './Toast';
 import { computePnl } from '../../lib/calc';
+import { formatDate } from '../format';
 import { T1moLink } from './T1moLink';
 import type { TradeDTO } from '../../lib/types';
 
@@ -42,6 +43,18 @@ function earningsSoon(iso: string | null): number | null {
   return d !== null && d >= 0 && d <= 7 ? d : null;
 }
 const earningsMissing = (iso: string | null) => iso == null || iso === '';
+
+// Countdown to earnings: green >10 days, yellow 5–10, red <5. Hidden once past.
+function EarningsCountdown({ iso }: { iso: string }) {
+  const d = daysUntil(iso);
+  if (d === null || d < 0) return null;
+  const color = d > 10
+    ? 'text-green-600 dark:text-green-400'
+    : d >= 5
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-red-600 dark:text-red-400';
+  return <div className={`text-[10px] font-medium ${color}`}>{d === 0 ? 'today' : `${d} day${d === 1 ? '' : 's'}`}</div>;
+}
 
 function IconButton({ label, onClick, className, children }: { label: string; onClick: () => void; className?: string; children: React.ReactNode }) {
   return (
@@ -100,7 +113,7 @@ function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, onOpen }
             <span className="text-red-600 dark:text-red-400">SL: {money(t.slPrice)}</span>
             {t.tpPrice != null && <span className="ml-2 text-green-600 dark:text-green-400">TP: {money(t.tpPrice)}</span>}
           </div>
-          {showHeld && t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {t.fillDate}</div>}
+          {showHeld && t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {formatDate(t.fillDate)}</div>}
         </div>
       </td>
       {showHeld && (
@@ -118,16 +131,20 @@ function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, onOpen }
         </td>
       )}
       <td className="px-3 py-2">
-        {t.earningsDate ?? '—'}
-        {warnEarnings && earningsMissing(t.earningsDate) && (
-          <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="No earnings date set">
-            ⚠ no date
-          </span>
-        )}
-        {soon !== null && (
-          <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="Earnings within 7 days">
-            ⚠ {soon === 0 ? 'today' : `${soon}d`}
-          </span>
+        {t.earningsDate ? (
+          <div className="leading-tight">
+            <div>{formatDate(t.earningsDate)}</div>
+            <EarningsCountdown iso={t.earningsDate} />
+          </div>
+        ) : (
+          <>
+            —
+            {warnEarnings && (
+              <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="No earnings date set">
+                ⚠ no date
+              </span>
+            )}
+          </>
         )}
       </td>
       {showHeld && <td className="px-3 py-2">{held === null ? '—' : held}</td>}

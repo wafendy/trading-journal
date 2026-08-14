@@ -88,7 +88,7 @@ const ALL_SIGNAL_DIRS: readonly { signal: EntrySignal; direction: TradeDirection
 ];
 const TYPES: readonly EntryType[] = ['buy_limit', 'buy_stop'];
 const SHORT_TYPES: readonly EntryType[] = ['sell_limit', 'sell_stop'];
-const VERIFY: readonly VerifyDays[] = [5, 7, 10, 14];
+const VERIFY: readonly VerifyDays[] = [5, 10, 15, 20, 25];
 const TICKERS = [
   'AAPL', 'MSFT', 'NVDA', 'AMD', 'TSLA', 'META', 'GOOGL', 'AMZN', 'NFLX', 'AVGO',
   'CRWD', 'SHOP', 'UBER', 'SOFI', 'PLTR', 'COIN', 'MSTR', 'SMCI', 'RIVN', 'ARM',
@@ -153,11 +153,12 @@ for (let i = 0; i < 4; i++) {
 // First, the six labelled demo conditions (stable tickers), then fill to ~22.
 const demoActive: { plan: PlanSeed; fill: string; keep?: boolean; nullEarn?: boolean }[] = [
   { plan: { ticker: 'TSLA', upeti: 1000, entryPrice: 330, slPrice: 300, tpPrice: 400, entryType: 'buy_limit', entrySignal: 'buy_magenta', earningsDate: daysFromNow(60), notes: 'Held past verify window — decide keep/exit.', verifyDays: 5 }, fill: daysFromNow(-25) }, // dud-flagged
-  { plan: { ticker: 'NVDA', upeti: 1200, entryPrice: 178, slPrice: 168, tpPrice: 210, entryType: 'buy_stop', entrySignal: 'hawk1', earningsDate: daysFromNow(70), notes: 'Fresh add on strength.', verifyDays: 7 }, fill: todayISO }, // fresh
+  { plan: { ticker: 'NVDA', upeti: 1200, entryPrice: 178, slPrice: 168, tpPrice: 210, entryType: 'buy_stop', entrySignal: 'hawk1', earningsDate: daysFromNow(70), notes: 'Fresh add on strength.', verifyDays: 10 }, fill: todayISO }, // fresh
   { plan: { ticker: 'MSFT', upeti: 800, entryPrice: 505, slPrice: 480, entryType: 'buy_limit', entrySignal: 'btb', earningsDate: daysFromNow(65), verifyDays: 5 }, fill: daysFromNow(-38), keep: true }, // kept
-  { plan: { ticker: 'GOOGL', upeti: 650, entryPrice: 165, slPrice: 156.75, tpPrice: 181.5, entryType: 'buy_limit', entrySignal: 'buy_lautan', earningsDate: daysFromNow(3), notes: 'Earnings in a few days — watch closely.', verifyDays: 10 }, fill: todayISO }, // earnings 3d
-  { plan: { ticker: 'AMZN', upeti: 700, entryPrice: 205, slPrice: 194.75, tpPrice: 225.5, entryType: 'buy_stop', entrySignal: 'btb', earningsDate: todayISO, verifyDays: 7 }, fill: todayISO }, // earnings today
-  { plan: { ticker: 'COIN', upeti: 500, entryPrice: 250, slPrice: 237.5, tpPrice: 275, entryType: 'buy_limit', entrySignal: 'buy_spec', earningsDate: daysFromNow(50), verifyDays: 7 }, fill: todayISO, nullEarn: true }, // missing earnings
+  { plan: { ticker: 'GOOGL', upeti: 650, entryPrice: 165, slPrice: 156.75, tpPrice: 181.5, entryType: 'buy_limit', entrySignal: 'buy_lautan', earningsDate: daysFromNow(3), notes: 'Earnings in a few days — watch closely.', verifyDays: 10 }, fill: todayISO }, // earnings 3d (red)
+  { plan: { ticker: 'AVGO', upeti: 900, entryPrice: 280, slPrice: 262, tpPrice: 320, entryType: 'buy_stop', entrySignal: 'hawk1', earningsDate: daysFromNow(7), notes: 'Earnings ~a week out — amber countdown.', verifyDays: 10 }, fill: todayISO }, // earnings 7d (amber)
+  { plan: { ticker: 'AMZN', upeti: 700, entryPrice: 205, slPrice: 194.75, tpPrice: 225.5, entryType: 'buy_stop', entrySignal: 'btb', earningsDate: todayISO, verifyDays: 10 }, fill: todayISO }, // earnings today
+  { plan: { ticker: 'COIN', upeti: 500, entryPrice: 250, slPrice: 237.5, tpPrice: 275, entryType: 'buy_limit', entrySignal: 'buy_spec', earningsDate: daysFromNow(50), verifyDays: 10 }, fill: todayISO, nullEarn: true }, // missing earnings
 ];
 for (const a of demoActive) {
   const t = mk(a.plan);

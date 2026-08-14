@@ -47,7 +47,7 @@ specs) unless the user explicitly asks. Leave `bun.lock` alone (do not stage it)
   (app factory), `index.ts` (entry point, node-server + static serving).
 - `src/client/` — `api.ts` (fetch wrappers), `components/`, `App.tsx` (composition root).
 - Earnings lookup: `src/server/earnings.ts` (Finnhub provider, injected via `Deps.getNextEarnings`; returns null without `FINNHUB_API_KEY` and never throws). Route `GET /api/earnings?ticker=`. Client auto-fills on ticker blur in `TradeForm` (manual edit always wins). The seed sets earnings dates directly and never calls the API.
-- Global settings: `app_settings` key-value table holds `upeti` and `verify_days`; `GET`/`PATCH /api/settings` (`repo.getSettings`/`setSettings`, defaults UPETI 100 / verifyDays 5). Edited via `SettingsControls` in the header; copied onto each new trade at creation.
+- Global settings: `app_settings` key-value table holds `upeti` and `verify_days`; `GET`/`PATCH /api/settings` (`repo.getSettings`/`setSettings`, defaults UPETI 100 / verifyDays 15). Edited via `SettingsControls` in the header; copied onto each new trade at creation.
 - Fill capture: "Mark filled" opens `FillModal` (fill date + required fill price, defaults to planned entry) → `POST /api/trades/:id/fill` with `{ fillDate, fillPrice }`.
 - History analytics: `GET /api/summary?year=` returns overall totals + `equityCurve` + `bySignal` (per-signal P&L/R/count/win-rate, signals with ≥1 exited trade). Rendered by `StatTiles`, `EquityChart` (overall cumulative curve only), and `SignalBreakdown` (table). All P&L in the route uses one `pnlOf` helper (cost basis `fillPrice ?? entryPrice`).
 

@@ -141,13 +141,13 @@ describe('settings endpoints', () => {
     const { app } = setup();
     const res = await app.request('/api/settings');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ upeti: 100, verifyDays: 5 });
+    expect(await res.json()).toEqual({ upeti: 100, verifyDays: 15 });
   });
   it('PATCH updates and returns merged settings', async () => {
     const { app } = setup();
     const res = await app.request('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ upeti: 250 }) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ upeti: 250, verifyDays: 5 });
+    expect(await res.json()).toEqual({ upeti: 250, verifyDays: 15 });
   });
   it('PATCH rejects bad verifyDays with 400', async () => {
     const { app } = setup();

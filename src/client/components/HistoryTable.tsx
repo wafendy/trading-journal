@@ -7,6 +7,7 @@ import { TradeDetails, NoteIcon } from './TradeDetails';
 import { EditHistoryForm } from './EditHistoryForm';
 import { ChartModal } from './ChartModal';
 import { T1moLink } from './T1moLink';
+import { formatDate } from '../format';
 import { Modal } from './ExitForm';
 import { useToast } from './Toast';
 import type { TradeDTO } from '../../lib/types';
@@ -112,13 +113,13 @@ export function HistoryTable({ year }: { year: number | null }) {
                     <span className="text-red-600 dark:text-red-400">SL: {money(t.slPrice)}</span>
                     {t.tpPrice != null && <span className="ml-2 text-green-600 dark:text-green-400">TP: {money(t.tpPrice)}</span>}
                   </div>
-                  {t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {t.fillDate}</div>}
+                  {t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {formatDate(t.fillDate)}</div>}
                 </div>
               </td>
               <td className="px-3 py-2">{money(t.upeti)}</td>
               <td className="px-3 py-2">
                 <div>{money(t.exitPrice)}</div>
-                <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">{t.exitDate}</div>
+                <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">{t.exitDate && formatDate(t.exitDate)}</div>
               </td>
               <td className={`px-3 py-2 font-semibold ${(t.realizedPnl ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {money(t.realizedPnl)} <span className="text-xs text-slate-500 dark:text-slate-400">({t.rMultiple != null ? `${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)}R` : '—'})</span>

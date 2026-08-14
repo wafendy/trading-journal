@@ -4,7 +4,7 @@ export type EntrySignal =
   | 'btb' | 'buy_lautan' | 'buy_magenta' | 'hawk1' | 'buy_spec' | 'no_signal'
   | 'bbb' | 'sell_lautan' | 'sell_magenta' | 'spec_sell' | 'red_bear' | 'bear_detected' | 'green_bull';
 export type TradeStatus = 'pending' | 'filled' | 'exited';
-export type VerifyDays = 5 | 7 | 10 | 14;
+export type VerifyDays = 5 | 10 | 15 | 20 | 25;
 export type DudDecision = null | 'keep' | 'exit';
 
 export interface TradeRow {

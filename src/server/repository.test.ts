@@ -116,13 +116,13 @@ describe('settings', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => { ctx = setup(); });
   it('defaults when unset', () => {
-    expect(ctx.repo.getSettings()).toEqual({ upeti: 100, verifyDays: 5 });
+    expect(ctx.repo.getSettings()).toEqual({ upeti: 100, verifyDays: 15 });
   });
   it('round-trips partial updates', () => {
     ctx.repo.setSettings({ upeti: 250 });
-    expect(ctx.repo.getSettings()).toEqual({ upeti: 250, verifyDays: 5 });
-    ctx.repo.setSettings({ verifyDays: 7 });
-    expect(ctx.repo.getSettings()).toEqual({ upeti: 250, verifyDays: 7 });
+    expect(ctx.repo.getSettings()).toEqual({ upeti: 250, verifyDays: 15 });
+    ctx.repo.setSettings({ verifyDays: 10 });
+    expect(ctx.repo.getSettings()).toEqual({ upeti: 250, verifyDays: 10 });
   });
 });
 

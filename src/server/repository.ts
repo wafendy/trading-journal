@@ -108,7 +108,7 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
       const rows = db.select().from(appSettings).all();
       const map = new Map(rows.map((r) => [r.key, r.value]));
       const upeti = map.has('upeti') ? Number(map.get('upeti')) : 100;
-      const verifyDays = map.has('verify_days') ? Number(map.get('verify_days')) : 5;
+      const verifyDays = map.has('verify_days') ? Number(map.get('verify_days')) : 15;
       return { upeti, verifyDays };
     },
     setSettings(input) {

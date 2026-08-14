@@ -89,7 +89,7 @@ describe('fillSchema', () => {
 describe('settingsSchema', () => {
   it('accepts partial updates', () => {
     expect(settingsSchema.parse({ upeti: 250 })).toEqual({ upeti: 250 });
-    expect(settingsSchema.parse({ verifyDays: 7 })).toEqual({ verifyDays: 7 });
+    expect(settingsSchema.parse({ verifyDays: 10 })).toEqual({ verifyDays: 10 });
     expect(settingsSchema.parse({})).toEqual({});
   });
   it('rejects bad values', () => {
