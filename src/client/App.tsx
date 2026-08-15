@@ -88,8 +88,8 @@ export default function App() {
                       onChange={(e) => {
                         const v = Number(e.target.value) || null;
                         setFromMonth(v);
-                        // Keep the range valid: bump To up to From when it would invert.
-                        if (v !== null && (toMonth === null || toMonth < v)) setToMonth(v);
+                        if (v !== null && toMonth === null) setToMonth(12); // first pick → default To = Dec
+                        else if (v !== null && toMonth !== null && toMonth < v) setToMonth(v); // keep range valid
                       }}
                       className="cursor-pointer rounded-lg bg-slate-200 px-2 py-1 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                     >
