@@ -14,11 +14,17 @@ import { formatDate } from '../format';
 import { T1moLink } from './T1moLink';
 import type { TradeDTO } from '../../lib/types';
 
-// Live-price cache, keyed by ticker. Module-level so it survives tab remounts.
-// TTL configurable via VITE_PRICE_CACHE_MINUTES (default 15); refresh serves fresh
-// entries from cache instead of hitting the API.
+// Live-price cache in localStorage, keyed by ticker, so it survives reloads (not just
+// tab remounts). TTL configurable via VITE_PRICE_CACHE_MINUTES (default 15); refresh
+// serves fresh entries from cache instead of hitting the API.
 const PRICE_CACHE_MS = (Number(import.meta.env.VITE_PRICE_CACHE_MINUTES) || 15) * 60_000;
-const priceCache = new Map<string, { price: number | null; at: number }>();
+const priceKey = (ticker: string) => `price:${ticker.toUpperCase()}`;
+function readPrice(ticker: string): { price: number | null; at: number } | null {
+  try { return JSON.parse(localStorage.getItem(priceKey(ticker)) ?? 'null'); } catch { return null; }
+}
+function writePrice(ticker: string, price: number | null) {
+  try { localStorage.setItem(priceKey(ticker), JSON.stringify({ price, at: Date.now() })); } catch { /* ignore quota/availability */ }
+}
 
 // T1mo signal capture feature flag (client). Server route is independently gated.
 const T1MO_CAPTURE = import.meta.env.VITE_T1MO_CAPTURE === 'true';
@@ -272,12 +278,12 @@ export function ActivePositions() {
       let fetched = 0; // live API calls actually made this run
       const entries = await Promise.all(
         tickers.map(async (ticker) => {
-          const hit = priceCache.get(ticker);
+          const hit = readPrice(ticker);
           if (hit && hit.at >= fresh) return [ticker, hit.price] as const; // cached — no API call
           fetched++;
           try {
             const price = (await api.quote(ticker)).price;
-            priceCache.set(ticker, { price, at: Date.now() });
+            writePrice(ticker, price);
             return [ticker, price] as const;
           } catch { return [ticker, hit?.price ?? null] as const; }
         }),

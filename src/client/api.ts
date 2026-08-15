@@ -17,6 +17,21 @@ async function json<T>(res: Response): Promise<T> {
 const post = (url: string, body?: unknown) =>
   fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 
+// Company profile is effectively static, so cache successful lookups in localStorage
+// for 30 days (keyed by ticker). Misses (null) are not cached, so they retry next open.
+type Profile = { name: string; industry: string | null } | null;
+const PROFILE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+async function getCachedProfile(ticker: string): Promise<Profile> {
+  const key = `profile:${ticker.toUpperCase()}`;
+  try {
+    const hit = JSON.parse(localStorage.getItem(key) ?? 'null') as { at: number; data: Profile } | null;
+    if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.data;
+  } catch { /* corrupt/unavailable storage → fall through to fetch */ }
+  const data = await fetch(`/api/profile?ticker=${encodeURIComponent(ticker)}`).then(json<Profile>);
+  if (data) try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), data })); } catch { /* ignore quota/availability */ }
+  return data;
+}
+
 export const api = {
   years: () => fetch('/api/years').then(json<number[]>),
   summary: (year: number, fromMonth?: number | null, toMonth?: number | null) =>
@@ -29,6 +44,7 @@ export const api = {
     fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<{ upeti: number; verifyDays: number }>),
   earnings: (ticker: string) =>
     fetch(`/api/earnings?ticker=${encodeURIComponent(ticker)}`).then(json<{ earningsDate: string | null }>),
+  profile: (ticker: string) => getCachedProfile(ticker),
   t1moThumbUrl: (id: number, variant: 'signal' | 'pixel', version: number) => `/api/trades/${id}/screenshot?variant=${variant}&v=${version}`,
   captureT1mo: () =>
     fetch('/api/t1mo/capture', { method: 'POST' })

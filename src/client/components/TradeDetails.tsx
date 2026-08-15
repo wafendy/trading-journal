@@ -1,5 +1,8 @@
+import { useQuery } from '@tanstack/react-query';
 import { Modal } from './ExitForm';
 import { SignalPill } from './SignalPill';
+import { api } from '../api';
+import { computePnl } from '../../lib/calc';
 import { formatDate } from '../format';
 import type { TradeDTO, EntryType, TradeDirection } from '../../lib/types';
 import type { ReactNode } from 'react';
@@ -72,12 +75,27 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
   const rr = tpPrice != null && slPrice != null && entryPrice > slPrice && tpPrice >= entryPrice
     ? (tpPrice - entryPrice) / (entryPrice - slPrice)
     : null;
+  // Planned $ risk (loss if SL hit) and $ reward (gain if TP hit), from the planned entry.
+  const riskAmt = slPrice != null ? -computePnl(entryPrice, slPrice, trade.shares, trade.direction) : null;
+  const rewardAmt = tpPrice != null ? computePnl(entryPrice, tpPrice, trade.shares, trade.direction) : null;
   const pnl = trade.realizedPnl != null
     ? `${money(trade.realizedPnl)}${trade.rMultiple != null ? ` (${trade.rMultiple >= 0 ? '+' : ''}${trade.rMultiple.toFixed(2)}R)` : ''}`
     : '—';
   const links = tickerLinks(trade.ticker);
+  // Company name + industry from Finnhub profile2 (live, never persisted). Null without
+  // FINNHUB_API_KEY or for an unknown symbol — the subtitle simply doesn't render.
+  const { data: profile } = useQuery({
+    queryKey: ['profile', trade.ticker],
+    queryFn: () => api.profile(trade.ticker),
+    staleTime: 30 * 24 * 60 * 60 * 1000,
+  });
   return (
     <Modal title={`${trade.ticker} — trade details`} onClose={onClose} size="xl">
+      {profile && (
+        <p className="-mt-2 mb-3 text-sm text-slate-500 dark:text-slate-400">
+          {profile.name}{profile.industry ? ` · ${profile.industry}` : ''}
+        </p>
+      )}
       {links.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-2">
           {links.map(({ label, site, url }) => (
@@ -102,16 +120,17 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
           <Field label="Direction">{DIRECTION_LABELS[trade.direction]}</Field>
           <Field label="Entry type">{ENTRY_TYPE_LABELS[trade.entryType]}</Field>
           <Field label="Entry signal"><SignalPill signal={trade.entrySignal} /></Field>
-          <div className="hidden sm:block" />
+          <Field label="Earnings date">{trade.earningsDate ? formatDate(trade.earningsDate) : '—'}</Field>
           {/* Row 2 */}
           <Field label="Entry price">{money(trade.entryPrice)}</Field>
           <Field label="SL"><span className="text-red-600 dark:text-red-400">{money(trade.slPrice)}</span></Field>
           <Field label="TP"><span className="text-green-600 dark:text-green-400">{money(trade.tpPrice)}</span></Field>
-          <Field label="Risk / Reward">{rr != null ? `1 : ${rr.toFixed(2)}` : '—'}</Field>
-          {/* Row 3 */}
-          <Field label="Upet1">{money(trade.upeti)}</Field>
           <Field label="QTY">{String(trade.shares)}</Field>
-          <Field label="Earnings date">{trade.earningsDate ? formatDate(trade.earningsDate) : '—'}</Field>
+          {/* Row 3 — Risk amount under SL, Reward amount under TP */}
+          <Field label="Upet1">{money(trade.upeti)}</Field>
+          <Field label="Risk amount"><span className="text-red-600 dark:text-red-400">{money(riskAmt)}</span></Field>
+          <Field label="Reward amount"><span className="text-green-600 dark:text-green-400">{money(rewardAmt)}</span></Field>
+          <Field label="Reward / Risk ratio">{rr != null ? `1 : ${rr.toFixed(2)}` : '—'}</Field>
         </div>
       </section>
 
