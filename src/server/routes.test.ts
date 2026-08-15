@@ -22,7 +22,7 @@ function setup(t1moCapturer: T1moCapturer | null = null) {
   const repo = createRepo(db, () => clock);
   const shotsDir = mkdtempSync(join(tmpdir(), 'routes-shots-'));
   const screenshots = createScreenshotStore(shotsDir);
-  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote, getProfile: async () => null, screenshots, t1moCapturer });
+  const app = buildApp({ repo, now: () => clock, getNextEarnings: async () => earnings, getQuote: async () => quote, screenshots, t1moCapturer });
   return { app, repo, shotsDir, setClock: (c: string) => (clock = c), setEarnings: (d: string | null) => (earnings = d), setQuote: (p: number | null) => (quote = p) };
 }
 

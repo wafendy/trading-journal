@@ -7,11 +7,10 @@ import { deriveTrade, computePnl, computeShares, computeR } from '../lib/calc';
 import type { TradeRow, EntrySignal } from '../lib/types';
 import type { EarningsProvider } from './earnings';
 import type { QuoteProvider } from './quotes';
-import type { ProfileProvider } from './profile';
 import { BadRequestError, type ScreenshotStore } from './screenshots';
 import type { T1moCapturer, CaptureResult } from './t1moCapture';
 
-export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; getProfile: ProfileProvider; screenshots: ScreenshotStore; t1moCapturer: T1moCapturer | null; }
+export interface Deps { repo: TradeRepo; now: () => string; getNextEarnings: EarningsProvider; getQuote: QuoteProvider; screenshots: ScreenshotStore; t1moCapturer: T1moCapturer | null; }
 
 // A multipart upload value that behaves like a File (has size/type + arrayBuffer()).
 // Duck-typed so it works across realms (Node global File vs jsdom's in tests).
@@ -23,7 +22,7 @@ function isUploadedFile(v: unknown): v is UploadedFile {
     && typeof (v as UploadedFile).arrayBuffer === 'function';
 }
 
-export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote, getProfile, screenshots, t1moCapturer }: Deps): void {
+export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote, screenshots, t1moCapturer }: Deps): void {
   const today = () => now().slice(0, 10);
   const dto = (row: TradeRow) => deriveTrade(row, today());
 
@@ -38,13 +37,6 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
     if (!/^[A-Z]{1,10}$/.test(ticker)) return c.json({ error: 'valid ticker required' }, 400);
     const earningsDate = await getNextEarnings(ticker, now().slice(0, 10));
     return c.json({ earningsDate });
-  });
-
-  // Company name + industry for display. Never persisted; null without FINNHUB_API_KEY.
-  api.get('/profile', async (c) => {
-    const ticker = (c.req.query('ticker') ?? '').trim().toUpperCase();
-    if (!/^[A-Z]{1,10}$/.test(ticker)) return c.json({ error: 'valid ticker required' }, 400);
-    return c.json(await getProfile(ticker));
   });
 
   // Live price lookup for unrealized-P&L estimates. Never persisted; price is null
