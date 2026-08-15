@@ -1,5 +1,6 @@
 import { Modal } from './ExitForm';
 import { SignalPill } from './SignalPill';
+import { formatDate } from '../format';
 import type { TradeDTO, EntryType, TradeDirection } from '../../lib/types';
 import type { ReactNode } from 'react';
 
@@ -110,7 +111,7 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
           {/* Row 3 */}
           <Field label="Upet1">{money(trade.upeti)}</Field>
           <Field label="QTY">{String(trade.shares)}</Field>
-          <Field label="Earnings date">{trade.earningsDate ?? '—'}</Field>
+          <Field label="Earnings date">{trade.earningsDate ? formatDate(trade.earningsDate) : '—'}</Field>
         </div>
       </section>
 
@@ -121,11 +122,11 @@ export function TradeDetails({ trade, onClose }: { trade: TradeDTO; onClose: () 
           <Field label="Status">{STATUS_LABEL[trade.status]}</Field>
           <Field label="Fill">
             <div>{money(trade.fillPrice)}</div>
-            {trade.fillDate && <div className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{trade.fillDate}</div>}
+            {trade.fillDate && <div className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{formatDate(trade.fillDate)}</div>}
           </Field>
           <Field label="Exit">
             <div>{money(trade.exitPrice)}</div>
-            {trade.exitDate && <div className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{trade.exitDate}</div>}
+            {trade.exitDate && <div className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{formatDate(trade.exitDate)}</div>}
           </Field>
           <Field label="Realized P&L">
             {trade.realizedPnl == null ? pnl : (

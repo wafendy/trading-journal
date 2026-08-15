@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useToast } from './Toast';
 
-const VERIFY = [5, 7, 10, 14];
+const VERIFY = [5, 10, 15, 20, 25];
 
 export function SettingsControls() {
   const qc = useQueryClient();
@@ -27,7 +27,7 @@ export function SettingsControls() {
           className={input} />
       </label>
       <label className="flex items-center gap-1">Confirm in
-        <select value={settings.data?.verifyDays ?? 5} onChange={(e) => save.mutate({ verifyDays: Number(e.target.value) })}
+        <select value={settings.data?.verifyDays ?? 15} onChange={(e) => save.mutate({ verifyDays: Number(e.target.value) })}
           className={input}>
           {VERIFY.map((d) => <option key={d} value={d}>{d} days</option>)}
         </select>

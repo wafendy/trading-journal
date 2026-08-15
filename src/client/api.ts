@@ -19,10 +19,11 @@ const post = (url: string, body?: unknown) =>
 
 export const api = {
   years: () => fetch('/api/years').then(json<number[]>),
-  summary: (year: number) => fetch(`/api/summary?year=${year}`).then(json<Summary>),
+  summary: (year: number, fromMonth?: number | null, toMonth?: number | null) =>
+    fetch(`/api/summary?year=${year}${fromMonth ? `&from=${fromMonth}&to=${toMonth ?? 12}` : ''}`).then(json<Summary>),
   open: (status: 'pending' | 'filled') => fetch(`/api/trades?status=${status}`).then(json<TradeDTO[]>),
-  history: (year: number, cursor: string | null, limit = 50) =>
-    fetch(`/api/trades/history?year=${year}&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`).then(json<HistoryPage>),
+  history: (year: number, cursor: string | null, limit = 50, signal?: string | null) =>
+    fetch(`/api/trades/history?year=${year}&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${signal ? `&signal=${signal}` : ''}`).then(json<HistoryPage>),
   settings: () => fetch('/api/settings').then(json<{ upeti: number; verifyDays: number }>),
   updateSettings: (b: { upeti?: number; verifyDays?: number }) =>
     fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(json<{ upeti: number; verifyDays: number }>),

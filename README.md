@@ -40,3 +40,10 @@ Data lives in `trading.db` (gitignored).
 Set `FINNHUB_API_KEY` in `.env` (free key at finnhub.io; `.env.sample` lists it). When creating a plan, the
 earnings date auto-fills from Finnhub after you enter a ticker. Without a key the
 field simply stays manual — nothing else changes. The seed never calls the API.
+
+
+## TODO
+Add Watchlist
+- Allow to add Watchlist, just to add Ticker, can be converted to Trading Plan under Actions, Prefilled the TICKER in the Trading Plan form and update the Earnings Date
+
+T1mo Integration

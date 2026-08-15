@@ -121,7 +121,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   const m = useMutation({
     mutationFn: () => api.create({
       ticker, upeti: Number(upeti), entryPrice: Number(entryPrice), slPrice: Number(slPrice),
-      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, direction, earningsDate, notes: notes.trim() || null, verifyDays: settings.data?.verifyDays ?? 5,
+      tpPrice: tpPrice ? Number(tpPrice) : null, entryType, entrySignal, direction, earningsDate, notes: notes.trim() || null, verifyDays: settings.data?.verifyDays ?? 15,
     }),
     onSuccess: () => { qc.invalidateQueries(); toast('Trade plan created'); reset(); onClose(); onCreated?.(); },
     onError: (err: Error) => toast(err.message ?? 'Something went wrong', 'error'),

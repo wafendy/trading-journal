@@ -63,6 +63,23 @@ describe('lifecycle endpoints', () => {
     expect(summary.equityCurve).toEqual([{ exitDate: '2026-08-20', cumulativePnl: 1000 }]);
   });
 
+  it('history filters by ?signal=', async () => {
+    const { app } = setup();
+    const mkExit = async (entrySignal: string) => {
+      const t = await (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, entrySignal }) })).json();
+      await app.request(`/api/trades/${t.id}/fill`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fillDate: '2026-08-04', fillPrice: 50 }) });
+      await app.request(`/api/trades/${t.id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 55, exitDate: '2026-08-20' }) });
+    };
+    await mkExit('btb');
+    await mkExit('hawk1');
+
+    const all = await (await app.request('/api/trades/history?year=2026&limit=50')).json();
+    expect(all.items).toHaveLength(2);
+    const btb = await (await app.request('/api/trades/history?year=2026&limit=50&signal=btb')).json();
+    expect(btb.items).toHaveLength(1);
+    expect(btb.items[0].entrySignal).toBe('btb');
+  });
+
   it('exit on pending returns 409', async () => {
     const { app } = setup();
     const created = await (await app.request('/api/trades', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
@@ -143,13 +160,13 @@ describe('settings endpoints', () => {
     const { app } = setup();
     const res = await app.request('/api/settings');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ upeti: 100, verifyDays: 5 });
+    expect(await res.json()).toEqual({ upeti: 100, verifyDays: 15 });
   });
   it('PATCH updates and returns merged settings', async () => {
     const { app } = setup();
     const res = await app.request('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ upeti: 250 }) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ upeti: 250, verifyDays: 5 });
+    expect(await res.json()).toEqual({ upeti: 250, verifyDays: 15 });
   });
   it('PATCH rejects bad verifyDays with 400', async () => {
     const { app } = setup();
@@ -183,6 +200,28 @@ describe('GET /api/summary bySignal', () => {
     expect(btb).toMatchObject({ pnl: 600, tradeCount: 1, winRate: 1 });
     const lautan = s.bySignal.find((g: { signal: string }) => g.signal === 'buy_lautan');
     expect(lautan).toMatchObject({ pnl: -1000, tradeCount: 1, winRate: 0 });
+  });
+
+  it('honors the ?from=/?to= month range', async () => {
+    const { app } = setup();
+    // June exit: (55-50)*200 = 1000 win; October exit: (45-50)*200 = -1000 loss
+    const jun = await mk(app, 'btb');
+    await app.request(`/api/trades/${jun.id}/fill`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fillDate: '2026-06-01', fillPrice: 50 }) });
+    await app.request(`/api/trades/${jun.id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 55, exitDate: '2026-06-20' }) });
+    const oct = await mk(app, 'btb');
+    await app.request(`/api/trades/${oct.id}/fill`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fillDate: '2026-10-01', fillPrice: 50 }) });
+    await app.request(`/api/trades/${oct.id}/exit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exitPrice: 45, exitDate: '2026-10-20' }) });
+
+    const all = await (await app.request('/api/summary?year=2026')).json();
+    expect(all.tradeCount).toBe(2);
+    // from July onward: only the October trade counts.
+    const since = await (await app.request('/api/summary?year=2026&from=7&to=12')).json();
+    expect(since.tradeCount).toBe(1);
+    expect(since.totalPnl).toBe(-1000);
+    // Jan–June: only the June trade counts.
+    const firstHalf = await (await app.request('/api/summary?year=2026&from=1&to=6')).json();
+    expect(firstHalf.tradeCount).toBe(1);
+    expect(firstHalf.totalPnl).toBe(1000);
   });
 
   it('omits signals with no trades', async () => {

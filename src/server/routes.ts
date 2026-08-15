@@ -53,8 +53,9 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
     const limit = Number(c.req.query('limit') ?? '50');
     const cursorRaw = c.req.query('cursor');
     const cursor = cursorRaw ? cursorRaw : null;
+    const signal = c.req.query('signal') || null;
     if (!Number.isInteger(year)) return c.json({ error: 'year required' }, 400);
-    const { items, nextCursor } = repo.history(year, cursor, limit);
+    const { items, nextCursor } = repo.history(year, cursor, limit, signal);
     return c.json({ items: items.map(dto), nextCursor });
   });
 
@@ -63,6 +64,11 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
   api.get('/summary', (c) => {
     const year = Number(c.req.query('year'));
     if (!Number.isInteger(year)) return c.json({ error: 'year required' }, 400);
+    // Optional month range (1-12), inclusive. Missing/invalid endpoints default to
+    // the whole year, so no params == all year (backward compatible).
+    const clampMonth = (v: number, dflt: number) => (Number.isInteger(v) && v >= 1 && v <= 12 ? v : dflt);
+    const fromMonth = clampMonth(Number(c.req.query('from')), 1);
+    const toMonth = clampMonth(Number(c.req.query('to')), 12);
     // gather all exited for year
     const all: TradeRow[] = [];
     let cursor: string | null = null;
@@ -71,8 +77,12 @@ export function registerRoutes(api: Hono, { repo, now, getNextEarnings, getQuote
       all.push(...page.items);
       cursor = page.nextCursor;
     } while (cursor !== null);
+    const inRange = all.filter((r) => {
+      const m = Number((r.exitDate as string).slice(5, 7));
+      return m >= fromMonth && m <= toMonth;
+    });
     // ascending for cumulative
-    const asc = [...all].sort((a, b) => a.exitDate!.localeCompare(b.exitDate!) || a.id - b.id);
+    const asc = [...inRange].sort((a, b) => a.exitDate!.localeCompare(b.exitDate!) || a.id - b.id);
     // Cost basis is the actual fill price when known, else the planned entry —
     // identical to deriveTrade, so summary matches the history table.
     const pnlOf = (r: TradeRow) => {

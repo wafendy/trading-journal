@@ -7,7 +7,7 @@ const entrySignal = z.enum([
   'bbb', 'sell_lautan', 'sell_magenta', 'spec_sell', 'red_bear', 'bear_detected', 'green_bull',
 ]);
 const direction = z.enum(['long', 'short']);
-const verifyDays = z.union([z.literal(5), z.literal(7), z.literal(10), z.literal(14)]);
+const verifyDays = z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20), z.literal(25)]);
 
 export const createTradeSchema = z.object({
   ticker: z.string().min(1).max(10).transform((s) => s.toUpperCase()),

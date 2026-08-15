@@ -10,6 +10,7 @@ import { EditPlanForm } from './EditPlanForm';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { useToast } from './Toast';
 import { computePnl } from '../../lib/calc';
+import { formatDate } from '../format';
 import { T1moLink } from './T1moLink';
 import type { TradeDTO } from '../../lib/types';
 
@@ -45,6 +46,18 @@ function earningsSoon(iso: string | null): number | null {
   return d !== null && d >= 0 && d <= 7 ? d : null;
 }
 const earningsMissing = (iso: string | null) => iso == null || iso === '';
+
+// Countdown to earnings: green >10 days, yellow 5–10, red <5. Hidden once past.
+function EarningsCountdown({ iso }: { iso: string }) {
+  const d = daysUntil(iso);
+  if (d === null || d < 0) return null;
+  const color = d > 10
+    ? 'text-green-600 dark:text-green-400'
+    : d >= 5
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-red-600 dark:text-red-400';
+  return <div className={`text-[10px] font-medium ${color}`}>{d === 0 ? 'today' : `${d} day${d === 1 ? '' : 's'}`}</div>;
+}
 
 function IconButton({ label, onClick, className, children }: { label: string; onClick: () => void; className?: string; children: React.ReactNode }) {
   return (
@@ -121,7 +134,7 @@ function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, showT1mo
             <span className="text-red-600 dark:text-red-400">SL: {money(t.slPrice)}</span>
             {t.tpPrice != null && <span className="ml-2 text-green-600 dark:text-green-400">TP: {money(t.tpPrice)}</span>}
           </div>
-          {showHeld && t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {t.fillDate}</div>}
+          {showHeld && t.fillDate && <div className="text-[10px] text-slate-500 dark:text-slate-400">Date filled: {formatDate(t.fillDate)}</div>}
         </div>
       </td>
       {showHeld && (
@@ -139,16 +152,20 @@ function Row({ t, children, flagged, warnEarnings, showHeld, livePrice, showT1mo
         </td>
       )}
       <td className="px-3 py-2">
-        {t.earningsDate ?? '—'}
-        {warnEarnings && earningsMissing(t.earningsDate) && (
-          <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="No earnings date set">
-            ⚠ no date
-          </span>
-        )}
-        {soon !== null && (
-          <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="Earnings within 7 days">
-            ⚠ {soon === 0 ? 'today' : `${soon}d`}
-          </span>
+        {t.earningsDate ? (
+          <div className="leading-tight">
+            <div>{formatDate(t.earningsDate)}</div>
+            <EarningsCountdown iso={t.earningsDate} />
+          </div>
+        ) : (
+          <>
+            —
+            {warnEarnings && (
+              <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/30 dark:text-red-200" title="No earnings date set">
+                ⚠ no date
+              </span>
+            )}
+          </>
         )}
       </td>
       {showHeld && <td className="px-3 py-2">{held === null ? '—' : held}</td>}
@@ -325,6 +342,11 @@ export function ActivePositions() {
     .filter((x) => x.days !== null)
     .sort((a, b) => (a.days as number) - (b.days as number));
   const missingEarnings = (filled.data ?? []).filter((t) => earningsMissing(t.earningsDate));
+  // Estimated total unrealized P&L: sum of per-row estimates, skipping tickers with no live price.
+  const unrealizedTotal = (filled.data ?? []).reduce((sum, t) => {
+    const p = prices[t.ticker];
+    return p == null ? sum : sum + computePnl(t.fillPrice ?? t.entryPrice, p, t.shares, t.direction);
+  }, 0);
 
   return (
     <section className="space-y-3">
@@ -362,7 +384,13 @@ export function ActivePositions() {
               {t1moBusy ? 'Capturing T1mo…' : 'Refresh T1mo Signal'}
             </button>
           )}
-          {pricesAt && <span className="text-xs text-slate-500 dark:text-slate-400">Estimated unrealized P&amp;L as of {pricesAt}</span>}
+          {pricesAt && (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Estimated total unrealized P&amp;L:{' '}
+              <span className={`font-semibold ${unrealizedTotal >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{money(unrealizedTotal)}</span>
+              {' '}as of {pricesAt}
+            </span>
+          )}
         </div>
       )}
       <table className="w-full text-sm">
