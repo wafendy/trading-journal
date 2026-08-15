@@ -292,6 +292,11 @@ export function ActivePositions() {
     .filter((x) => x.days !== null)
     .sort((a, b) => (a.days as number) - (b.days as number));
   const missingEarnings = (filled.data ?? []).filter((t) => earningsMissing(t.earningsDate));
+  // Estimated total unrealized P&L: sum of per-row estimates, skipping tickers with no live price.
+  const unrealizedTotal = (filled.data ?? []).reduce((sum, t) => {
+    const p = prices[t.ticker];
+    return p == null ? sum : sum + computePnl(t.fillPrice ?? t.entryPrice, p, t.shares, t.direction);
+  }, 0);
 
   return (
     <section className="space-y-3">
@@ -320,7 +325,13 @@ export function ActivePositions() {
           >
             {refreshing ? 'Fetching prices…' : 'Refresh prices'}
           </button>
-          {pricesAt && <span className="text-xs text-slate-500 dark:text-slate-400">Estimated unrealized P&amp;L as of {pricesAt}</span>}
+          {pricesAt && (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Estimated total unrealized P&amp;L:{' '}
+              <span className={`font-semibold ${unrealizedTotal >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{money(unrealizedTotal)}</span>
+              {' '}as of {pricesAt}
+            </span>
+          )}
         </div>
       )}
       <table className="w-full text-sm">
