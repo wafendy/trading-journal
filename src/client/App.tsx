@@ -13,6 +13,8 @@ import { SettingsControls } from './components/SettingsControls';
 
 type Tab = 'pending' | 'active' | 'history';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('active');
   const [formOpen, setFormOpen] = useState(false);
@@ -24,10 +26,13 @@ export default function App() {
   // Year state lives here but is only surfaced inside the History tab.
   const years = useQuery({ queryKey: ['years'], queryFn: api.years });
   const [year, setYear] = useState<number | null>(null);
+  // Month-range filter for the Performance stats (1-12, inclusive). fromMonth null = whole year.
+  const [fromMonth, setFromMonth] = useState<number | null>(null);
+  const [toMonth, setToMonth] = useState<number | null>(null);
   useEffect(() => {
     if (year === null && years.data && years.data.length > 0) setYear(years.data[0]!);
   }, [years.data, year]);
-  const summary = useQuery({ queryKey: ['summary', year], queryFn: () => api.summary(year!), enabled: year !== null });
+  const summary = useQuery({ queryKey: ['summary', year, fromMonth, toMonth], queryFn: () => api.summary(year!, fromMonth, toMonth), enabled: year !== null });
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'pending', label: 'Trading Plan', count: pending.data?.length },
@@ -77,7 +82,34 @@ export default function App() {
               <>
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Performance</h2>
-                  <YearSelector years={years.data ?? []} selected={year} onSelect={setYear} />
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={fromMonth ?? 0}
+                      onChange={(e) => {
+                        const v = Number(e.target.value) || null;
+                        setFromMonth(v);
+                        // Keep the range valid: bump To up to From when it would invert.
+                        if (v !== null && (toMonth === null || toMonth < v)) setToMonth(v);
+                      }}
+                      className="cursor-pointer rounded-lg bg-slate-200 px-2 py-1 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      <option value={0}>All year</option>
+                      {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                    </select>
+                    {fromMonth !== null && (
+                      <>
+                        <span className="text-sm text-slate-500 dark:text-slate-400">–</span>
+                        <select
+                          value={toMonth ?? 12}
+                          onChange={(e) => setToMonth(Number(e.target.value))}
+                          className="cursor-pointer rounded-lg bg-slate-200 px-2 py-1 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          {MONTHS.map((m, i) => <option key={m} value={i + 1} disabled={i + 1 < fromMonth}>{m}</option>)}
+                        </select>
+                      </>
+                    )}
+                    <YearSelector years={years.data ?? []} selected={year} onSelect={(y) => { setYear(y); setFromMonth(null); setToMonth(null); }} />
+                  </div>
                 </div>
                 <section className="space-y-4">
                   <StatTiles summary={summary.data} />

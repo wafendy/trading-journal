@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pencil, X } from 'lucide-react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import { SignalPill } from './SignalPill';
+import { SignalPill, SIGNAL_LABELS } from './SignalPill';
 import { TradeDetails, NoteIcon } from './TradeDetails';
 import { EditHistoryForm } from './EditHistoryForm';
 import { ChartModal } from './ChartModal';
@@ -46,9 +46,10 @@ function ChartThumb({ trade, version, onOpen }: { trade: TradeDTO; version: numb
 }
 
 export function HistoryTable({ year }: { year: number | null }) {
+  const [signal, setSignal] = useState<string>(''); // '' = all signals
   const q = useInfiniteQuery({
-    queryKey: ['history', year],
-    queryFn: ({ pageParam }) => api.history(year as number, pageParam as string | null),
+    queryKey: ['history', year, signal],
+    queryFn: ({ pageParam }) => api.history(year as number, pageParam as string | null, 50, signal || null),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled: year !== null,
@@ -84,7 +85,17 @@ export function HistoryTable({ year }: { year: number | null }) {
   const th = 'px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400';
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Trading History</h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Trading History</h2>
+        <select
+          value={signal}
+          onChange={(e) => setSignal(e.target.value)}
+          className="cursor-pointer rounded-lg bg-slate-200 px-2 py-1 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        >
+          <option value="">All signals</option>
+          {Object.entries(SIGNAL_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+      </div>
       <table className="w-full text-sm">
         <thead><tr>
           <th className={th}>Ticker</th><th className={th}>Signal</th><th className={th}>Entry</th>

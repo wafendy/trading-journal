@@ -12,12 +12,11 @@ export function SignalBreakdown({ rows }: { rows: SignalPerformance[] }) {
   if (rows.length === 0) return null;
   return (
     <div className="rounded-xl bg-slate-100 p-4 dark:bg-slate-800/40">
-      <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">By buy signal</h3>
+      <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Performance by Signal</h3>
       <table className="w-full text-sm">
         <thead><tr>
           <th className={th}>Signal</th>
           <th className={`${th} text-right`}>P&amp;L</th>
-          <th className={`${th} text-right`}>Total R</th>
           <th className={`${th} text-right`}>Trades</th>
           <th className={`${th} text-right`}>Win rate</th>
         </tr></thead>
@@ -26,7 +25,6 @@ export function SignalBreakdown({ rows }: { rows: SignalPerformance[] }) {
             <tr key={r.signal} className="border-t border-slate-200 dark:border-slate-700/60">
               <td className={td}><SignalPill signal={r.signal} /></td>
               <td className={`${td} text-right font-medium ${pnlCls(r.pnl)}`}>{money(r.pnl)}</td>
-              <td className={`${td} text-right`}>{`${r.totalR >= 0 ? '+' : ''}${r.totalR.toFixed(2)}R`}</td>
               <td className={`${td} text-right`}>{r.tradeCount}</td>
               <td className={`${td} text-right`}>{`${(r.winRate * 100).toFixed(0)}%`}</td>
             </tr>

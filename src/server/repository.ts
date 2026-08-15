@@ -10,7 +10,7 @@ export class ConflictError extends Error {}
 export interface TradeRepo {
   create(input: CreateTradeInput): TradeRow;
   list(status: 'pending' | 'filled'): TradeRow[];
-  history(year: number, cursor: string | null, limit: number): { items: TradeRow[]; nextCursor: string | null };
+  history(year: number, cursor: string | null, limit: number, signal?: string | null): { items: TradeRow[]; nextCursor: string | null };
   years(): number[];
   getById(id: number): TradeRow | undefined;
   patch(id: number, input: PatchTradeInput): TradeRow;
@@ -44,9 +44,10 @@ export function createRepo(db: DB, now: () => string): TradeRepo {
     list(status) {
       return db.select().from(trades).where(eq(trades.status, status)).orderBy(desc(trades.id)).all() as TradeRow[];
     },
-    history(year, cursor, limit) {
+    history(year, cursor, limit, signal) {
       const y = String(year);
       const conds = [eq(trades.status, 'exited'), sql`substr(${trades.exitDate},1,4) = ${y}`];
+      if (signal) conds.push(eq(trades.entrySignal, signal));
       // Composite keyset cursor "<exitDate>|<id>": rows strictly "after" the
       // boundary in (exit_date DESC, id DESC) order. Splitting on the FIRST '|'
       // keeps the id intact even though exitDate never contains '|'.
