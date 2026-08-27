@@ -33,6 +33,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   const qc = useQueryClient();
   const toast = useToast();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const activePositions = useQuery({ queryKey: ['trades', 'filled'], queryFn: () => api.open('filled') });
   const [ticker, setTicker] = useState('');
   const [upeti, setUpeti] = useState('');
   const [entryPrice, setEntryPrice] = useState('');
@@ -44,7 +45,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
   const [slEdited, setSlEdited] = useState(false);
   const [tpEdited, setTpEdited] = useState(false);
   const [direction, setDirection] = useState<TradeDirection>('long');
-  const [entryType, setEntryType] = useState<EntryType>('buy_limit');
+  const [entryType, setEntryType] = useState<EntryType>('buy_stop');
   const [entrySignal, setEntrySignal] = useState<EntrySignal>('buy_lautan');
   const [earningsDate, setEarningsDate] = useState('');
   const [earningsStatus, setEarningsStatus] = useState<'idle' | 'loading' | 'fetched' | 'notfound'>('idle');
@@ -97,6 +98,8 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
 
   const today = todayISO();
   const earningsDateError = earningsDate !== '' && earningsDate < today ? 'Earnings date cannot be in the past' : '';
+  const tickerActiveWarning = ticker.trim() !== '' && activePositions.data?.some((t) => t.ticker.toUpperCase() === ticker.trim().toUpperCase())
+    ? `Existing position in ${ticker.trim().toUpperCase()}` : '';
 
   // Clear the form back to a pristine state so the next open starts empty.
   // UPETI resets to the current global default (not blank).
@@ -109,7 +112,7 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
     setSlEdited(false);
     setTpEdited(false);
     setDirection('long');
-    setEntryType('buy_limit');
+    setEntryType('buy_stop');
     setEntrySignal('buy_lautan');
     setEarningsDate('');
     setEarningsStatus('idle');
@@ -133,14 +136,14 @@ export function TradeForm({ open, onClose, onCreated }: { open: boolean; onClose
     <Modal title="New Trade Plan" onClose={onClose}>
       <div className="grid grid-cols-3 gap-3 text-sm">
         {/* Row 1 */}
-        <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} onBlur={lookupEarnings} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupEarnings(); entryPriceRef.current?.focus(); } }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
+        <label>Ticker<input value={ticker} onChange={(e) => setTicker(e.target.value)} onBlur={lookupEarnings} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupEarnings(); entryPriceRef.current?.focus(); } }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" />{tickerActiveWarning && <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">{tickerActiveWarning}</span>}</label>
         <label>Earnings date<input type="date" min={today} value={earningsDate} onChange={(ev) => { setEarningsEdited(true); setEarningsStatus('idle'); setEarningsDate(rollForward90(ev.target.value)); }} className={`mt-1 w-full rounded bg-white dark:bg-slate-700 border px-2 py-1 ${earningsDateError ? 'border-red-500' : 'border-slate-300 dark:border-0'}`} />{earningsDateError && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{earningsDateError}</span>}{!earningsDateError && earningsStatus === 'loading' && <span className="mt-1 block text-xs text-slate-400">Looking up earnings…</span>}{!earningsDateError && earningsStatus === 'fetched' && <span className="mt-1 block text-xs text-slate-400">Fetched from Finnhub</span>}{!earningsDateError && earningsStatus === 'notfound' && <span className="mt-1 block text-xs text-slate-400">No earnings date found — enter manually</span>}</label>
         <label>Upet1<input type="number" step="any" value={upeti} onChange={(e) => setUpeti(e.target.value)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1" /></label>
         {/* Row 2 */}
         <label>Direction<select value={direction} onChange={(e) => {
           const d = e.target.value as TradeDirection;
           setDirection(d);
-          setEntryType(ENTRY_TYPES[d][0]!.value); // keep entry type valid for the new direction
+          setEntryType(d === 'long' ? 'buy_stop' : ENTRY_TYPES[d][0]!.value); // keep entry type valid for the new direction
           setEntrySignal(SIGNALS_BY_DIRECTION[d][0]!); // and reset signal to a valid one
         }} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1"><option value="long">Long (Buy)</option><option value="short">Short (Sell)</option></select></label>
         <label>Entry signal<select value={entrySignal} onChange={(e) => setEntrySignal(e.target.value as EntrySignal)} className="mt-1 w-full rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-0 px-2 py-1">{SIGNALS_BY_DIRECTION[direction].map((s) => <option key={s} value={s}>{SIGNAL_LABELS[s]}</option>)}</select></label>
